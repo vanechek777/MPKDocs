@@ -1,4 +1,5 @@
-Сборка .ipa для приложения MPKDocumentsMAUI настроена в корне репозитория:
-  .github/workflows/ios.yml
+Сборка .ipa: .github/workflows/ios.yml (ветка main/master или «Run workflow» вручную).
 
-Старый ios.yml из этого каталога ссылался на проект FinanceManager и не подходит к MPKDocumentsMAUI.
+После успешного job: GitHub → Actions → последний запуск → Artifacts → MPKDocumentsMAUI-iOS-ipa (.zip с .ipa и/или .app).
+
+Локально на Windows .ipa для iOS не собрать — нужен macOS или этот CI.

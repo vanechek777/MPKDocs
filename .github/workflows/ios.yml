@@ -52,11 +52,12 @@ jobs:
       - name: Restore Shared (last)
         run: dotnet restore "$SHARED_PROJ"
 
-      - name: Build IPA
+      # publish надёжнее отдаёт .ipa для Single Project MAUI
+      - name: Publish IPA
         run: |
-          dotnet build "$MAIN_PROJ" \
-            --framework net9.0-ios \
-            --configuration Release \
+          dotnet publish "$MAIN_PROJ" \
+            -f net9.0-ios \
+            -c Release \
             -p:RuntimeIdentifier=ios-arm64 \
             -p:BuildIpa=true \
             -p:CodesignKey="-" \
@@ -67,9 +68,9 @@ jobs:
 
       - name: List outputs
         run: |
-          echo "=== IPA / app ==="
+          echo "=== IPA / .app under bin/Release/net9.0-ios ==="
           find MPKDocumentsMAUI/MPKDocumentsMAUI/bin/Release/net9.0-ios -name "*.ipa" 2>/dev/null || true
-          find MPKDocumentsMAUI/MPKDocumentsMAUI/bin/Release/net9.0-ios -name "*.app" -type d 2>/dev/null | head -20 || true
+          find MPKDocumentsMAUI/MPKDocumentsMAUI/bin/Release/net9.0-ios -name "*.app" -type d 2>/dev/null | head -30 || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
