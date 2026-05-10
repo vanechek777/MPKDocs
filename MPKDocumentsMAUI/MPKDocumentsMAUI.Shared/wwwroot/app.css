@@ -184,7 +184,7 @@
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
 
     /* Navbar */
-    --navbar-height: 70px;
+    --navbar-height: 77px;
     --navbar-bottom-offset: 24px;
     --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -2581,9 +2581,10 @@ html.mpk-theme-light .lg-pill-clip {
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.10);
 }
 html.mpk-theme-light .lg-pill-bg {
-    background: rgba(248, 249, 252, 0.72);
-    backdrop-filter: blur(24px) saturate(1.55) brightness(1.02);
-    -webkit-backdrop-filter: blur(24px) saturate(1.55) brightness(1.02);
+    background: rgba(240, 242, 248, 0.90);
+    backdrop-filter: saturate(1.5) brightness(1.03);
+    -webkit-backdrop-filter: saturate(1.5) brightness(1.03);
+    filter: none !important;
 }
 
 /* MAUI WebView (iOS): backdrop-filter часто гасится, если на том же слое SVG filter — оставляем «матовое стекло» */

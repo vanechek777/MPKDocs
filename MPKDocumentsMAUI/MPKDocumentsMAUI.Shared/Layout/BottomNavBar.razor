@@ -34,7 +34,7 @@
     <div class="lg-navbar-pill">
         <div class="lg-pill-clip">
             <!-- Слой 1: Фон с эффектом Liquid Glass (преломление) -->
-            <div class="lg-pill-bg" style="filter: url(#lg-nav-filter)"></div>
+            <div class="lg-pill-bg"></div>
 
             <!-- Слой 2: Скользящий стеклянный индикатор -->
             <div class="lg-indicator" data-lg-tab="@_activeTab"></div>
@@ -83,7 +83,7 @@
         else _activeTab = "home";
     }
 
-    private string MiddleHref => MobileShell.IsSigningOnlyShell ? "/verify-nep" : "";
+    private string MiddleHref => MobileShell.IsSigningOnlyShell ? "/verify-nep" : "/";
 
     private NavLinkMatch MiddleMatch =>
         MobileShell.IsSigningOnlyShell ? NavLinkMatch.Prefix : NavLinkMatch.All;

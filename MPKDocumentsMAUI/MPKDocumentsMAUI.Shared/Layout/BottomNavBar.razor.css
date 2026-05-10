@@ -103,21 +103,24 @@
 /* ------------------------------------------------------------------
    PILL BACKGROUND LAYER — видимый фон с Liquid Glass фильтром
    ------------------------------------------------------------------ */
+/*
+ * Тёмно-серый liquid glass: saturate/brightness + lg-nav-filter (без радиальных бликов).
+ */
 .lg-pill-bg {
     position: absolute;
-    /* Делаем слой значительно больше, чтобы сильный scale не доставал до краев */
-    top: -24px; bottom: -24px; left: -24px; right: -24px;
-    border-radius: 63px; /* Увеличиваем радиус скругления пропорционально отступу (39 + 24) */
-    
-    /* Размытие фона + SVG-рефракция — на iOS WKWebView blur даёт «стекло», если filter слабый */
-    background: rgba(30, 30, 30, 0.42);
-    backdrop-filter: blur(22px) saturate(1.6) brightness(1.06);
-    -webkit-backdrop-filter: blur(22px) saturate(1.6) brightness(1.06);
-    
-    /* Искажает фон (рефракция)! */
-    filter: url(#lg-nav-filter);
+    top: -24px;
+    bottom: -24px;
+    left: -24px;
+    right: -24px;
+    border-radius: 63px;
     z-index: 0;
     pointer-events: none;
+    /* Почти плоская подложка: без радиальных бликов (они читались как градиент) */
+    background: rgba(22, 22, 26, 0.88);
+    backdrop-filter: saturate(1.65) brightness(1.06);
+    -webkit-backdrop-filter: saturate(1.65) brightness(1.06);
+    filter: url(#lg-nav-filter);
+    transition: background 0.2s ease;
 }
 
 /* ------------------------------------------------------------------
@@ -125,6 +128,7 @@
    ------------------------------------------------------------------ */
 .lg-nav-items {
     position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     width: 100%;
@@ -145,9 +149,8 @@
     height: calc(100% - 8px);
     border-radius: 999px;
     pointer-events: none;
-    z-index: 0;
+    z-index: 1;
 
-    --lg-slot: calc((100% - 8px) / 3);
     transform: translateX(0);
 
     /* Кнопка на навбаре: #FF0000 38% прозрачность */
@@ -164,12 +167,20 @@
     transition: transform 0.42s cubic-bezier(0.34, 1.40, 0.64, 1);
 }
 
+/*
+ * translateX по 100%/200% ширины самой плашки — стабильно в WebView;
+ * процент из --lg-slot внутри translate даёт поехавшие слоты.
+ */
+.lg-indicator[data-lg-tab="signing"] {
+    transform: translateX(0);
+}
+
 .lg-indicator[data-lg-tab="home"] {
-    transform: translateX(var(--lg-slot));
+    transform: translateX(100%);
 }
 
 .lg-indicator[data-lg-tab="profile"] {
-    transform: translateX(calc(var(--lg-slot) * 2));
+    transform: translateX(200%);
 }
 
 /* ------------------------------------------------------------------
