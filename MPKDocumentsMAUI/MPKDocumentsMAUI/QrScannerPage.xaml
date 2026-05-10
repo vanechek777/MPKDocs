@@ -164,5 +164,27 @@
                 </Border>
             </Grid>
         </Grid>
+
+        <!-- Пока камера поднимает нативный preview — затем скрываем в коде -->
+        <Grid x:Name="LoadingOverlay"
+              Grid.RowSpan="2"
+              BackgroundColor="#DD000000"
+              HorizontalOptions="Fill"
+              VerticalOptions="Fill"
+              ZIndex="200">
+            <VerticalStackLayout HorizontalOptions="Center"
+                                 VerticalOptions="Center"
+                                 Spacing="14">
+                <ActivityIndicator IsRunning="True"
+                                   Color="#FFFFFF"
+                                   WidthRequest="40"
+                                   HeightRequest="40" />
+                <Label Text="Подготовка камеры…"
+                       TextColor="White"
+                       FontSize="15"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center" />
+            </VerticalStackLayout>
+        </Grid>
     </Grid>
 </ContentPage>

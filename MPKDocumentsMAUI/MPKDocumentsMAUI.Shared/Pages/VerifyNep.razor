@@ -113,9 +113,11 @@
     private async Task ScanQrAsync()
     {
         if (busy) return;
-        busyText = "Камера…";
+        busyText = "Открываем камеру…";
         lastResult = null;
         await InvokeAsync(StateHasChanged);
+        /* Дать Blazor/WebView дорисовать занятость до тяжёлого modal + инициализации камеры */
+        await Task.Delay(48);
         try
         {
             var raw = await QrScan.ScanQrFromCameraAsync();

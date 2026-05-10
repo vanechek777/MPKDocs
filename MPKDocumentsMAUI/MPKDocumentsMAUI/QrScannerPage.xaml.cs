@@ -17,6 +17,9 @@ public partial class QrScannerPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+
+        LoadingOverlay.IsVisible = true;
+
         try
         {
             CameraView.Options = new BarcodeReaderOptions
@@ -31,11 +34,49 @@ public partial class QrScannerPage : ContentPage
         {
             /* платформы без камеры оставят дефолт */
         }
+
+        /* Нативный preview поднимается долго — не блокируем UI-поток, убираем оверлей после handler + паузы */
+        _ = DismissLoaderAfterCameraReadyAsync();
+    }
+
+    private async Task DismissLoaderAfterCameraReadyAsync()
+    {
+        try
+        {
+            for (var i = 0; i < 70 && CameraView.Handler is null; i++)
+                await Task.Delay(32);
+
+            await Task.Delay(340);
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            try
+            {
+                LoadingOverlay.IsVisible = false;
+            }
+            catch
+            {
+                /* страница могла уже исчезнуть */
+            }
+        });
     }
 
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
+        try
+        {
+            LoadingOverlay.IsVisible = false;
+        }
+        catch
+        {
+            /* ignore */
+        }
         try
         {
             CameraView.IsTorchOn = false;

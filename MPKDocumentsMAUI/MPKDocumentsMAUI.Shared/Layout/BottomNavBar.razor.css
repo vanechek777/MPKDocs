@@ -23,11 +23,60 @@
 
 /* Узкий экран: масштаб без перерасчёта шага индикатора */
 @media (max-width: 440px) {
-    .lg-navbar {
+    .lg-navbar:not(.lg-navbar--compact) {
         max-width: calc(100vw - 16px);
         transform: translateX(-50%) scale(min(1, calc((100vw - 16px) / 418)));
         transform-origin: center bottom;
     }
+
+    /* Компактный pill уже 320px — отдельный расчёт, без двойного scale */
+    .lg-navbar.lg-navbar--compact {
+        max-width: min(320px, calc(100vw - 28px));
+        transform: translateX(-50%);
+    }
+}
+
+/* Компактный навбар (MAUI телефон/планшет, только подпись) */
+.lg-navbar.lg-navbar--compact {
+    width: 320px;
+    height: 54px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+}
+
+.lg-navbar--compact .lg-navbar-pill {
+    height: 54px;
+    border-radius: 27px;
+}
+
+.lg-navbar--compact .lg-pill-clip {
+    height: 54px;
+    border-radius: 27px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38);
+}
+
+.lg-navbar--compact .lg-pill-bg {
+    top: -18px;
+    bottom: -18px;
+    left: -18px;
+    right: -18px;
+    border-radius: 45px;
+}
+
+.lg-navbar--compact .lg-indicator {
+    top: 4px;
+    left: 4px;
+    width: 104px;
+    height: 46px;
+    border-radius: 23px;
+}
+
+.lg-navbar--compact ::deep .lg-nav-item {
+    border-radius: 23px;
+}
+
+.lg-navbar--compact .lg-icon {
+    width: 22px;
+    height: 22px;
 }
 
 /* ------------------------------------------------------------------

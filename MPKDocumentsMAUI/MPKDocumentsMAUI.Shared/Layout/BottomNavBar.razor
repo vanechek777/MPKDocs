@@ -30,7 +30,7 @@
     </defs>
 </svg>
 
-<nav class="lg-navbar">
+<nav class="lg-navbar @(MobileShell.IsSigningOnlyShell ? "lg-navbar--compact" : null)">
     <div class="lg-navbar-pill">
         <div class="lg-pill-clip">
             <!-- Слой 1: Фон с эффектом Liquid Glass (преломление) -->
@@ -83,13 +83,24 @@
         else _activeTab = "home";
     }
 
-    // Шаг = слот = (418 - 8) / 3 ≈ 136.67px
-    private string GetIndicatorOffset() => _activeTab switch
+    /** Шаг индикатора в px: (ширина pill − 8) / 3 — должно совпадать с .lg-navbar--compact / полным макетом в CSS */
+    private string GetIndicatorOffset()
     {
-        "signing" => "0px",
-        "profile" => "273.33px",
-        _         => "136.67px"
-    };
+        var slotPx = IndicatorSlotPx;
+        return _activeTab switch
+        {
+            "signing" => "0px",
+            "profile" => FormatSlotPx(slotPx * 2),
+            _         => FormatSlotPx(slotPx)
+        };
+    }
+
+    /// <remarks>Стандартный макет 418px; компактный 320 — только мобильный MAUI-shell.</remarks>
+    private decimal IndicatorSlotPx =>
+        MobileShell.IsSigningOnlyShell ? 104m : (418m - 8m) / 3m;
+
+    private static string FormatSlotPx(decimal px) =>
+        px.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "px";
 
     private string MiddleHref => MobileShell.IsSigningOnlyShell ? "/verify-nep" : "";
 

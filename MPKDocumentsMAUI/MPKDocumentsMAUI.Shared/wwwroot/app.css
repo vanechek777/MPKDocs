@@ -2625,10 +2625,10 @@ html.mpk-theme-light .mpk-file-drop--over {
    Мобильный режим (телефон / планшет MAUI): только подпись + проверка НЭП
    ============================================================================= */
 .app-shell--mobile-signing {
-    --navbar-height: 77px;
-    --navbar-bottom-offset: 20px;
-    /* Pill 77px + bottom offset ~20px + safe area — запас под плавающий Liquid Glass */
-    --mpk-mobile-nav-h: calc(97px + env(safe-area-inset-bottom, 0px));
+    /* Компактный pill (~54px) + отступ + запас под плавающий навбар */
+    --navbar-height: 54px;
+    --navbar-bottom-offset: 14px;
+    --mpk-mobile-nav-h: calc(68px + env(safe-area-inset-bottom, 0px));
 }
 
 .app-shell--mobile-signing .page-content {
