@@ -28,6 +28,7 @@ from app.db.session import get_db
 from app.core.esig import build_esig_payload, esig_to_bytes
 from app.core.nep import document_hash_hex, generate_keypair, load_private_key, load_public_key, sign_hash_hex, verify_hash_hex
 from app.core.otp import verify_and_consume as verify_otp_and_consume
+from app.services.document_notify import fire_notify_initiator, fire_notify_turn
 from app.services.signing_turn import (
     active_pending_step_by_document,
     select_actionable_pending_task,
@@ -184,6 +185,7 @@ async def create_document(
         )
 
     await db.commit()
+    fire_notify_turn(doc.id)
     return CreateDocumentResponse(document_id=doc.id, status=doc.Status or "IN_PROGRESS")
 
 
@@ -1039,6 +1041,8 @@ async def sign_document(
         doc.Status = doc.Status or "IN_PROGRESS"
 
     await db.commit()
+    fire_notify_initiator(document_id, user.id, event="signed", document_status=doc.Status)
+    fire_notify_turn(document_id)
     return ActionResponse(document_id=document_id, document_status=doc.Status)
 
 
@@ -1062,6 +1066,7 @@ async def reject_document(
     doc.Status = "REJECTED"
 
     await db.commit()
+    fire_notify_initiator(document_id, user.id, event="rejected", document_status=doc.Status)
     return ActionResponse(document_id=document_id, document_status=doc.Status)
 
 

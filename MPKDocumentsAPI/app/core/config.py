@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     otp_dev_mode: bool = False
     otp_dev_return_code: bool = False
 
+    # Уведомления о документах по SMTP (тот же канал, что OTP на email). Без SMTP — тихий no-op.
+    document_notify_email_enabled: bool = True
+
     @property
     def database_url(self) -> str:
         # asyncmy driver
