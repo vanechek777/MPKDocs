@@ -3,3 +3,5 @@
 После успешного job: GitHub → Actions → последний запуск → Artifacts → MPKDocumentsMAUI-iOS-ipa (.zip с .ipa и/или .app).
 
 Локально на Windows .ipa для iOS не собрать — нужен macOS или этот CI.
+
+В CI при расхождении Xcode/workload в publish добавлен -p:ValidateXcodeVersion=false (см. доку Microsoft по xcode-requirement). Когда GitHub поставит Xcode 26.4+, свойство можно убрать.

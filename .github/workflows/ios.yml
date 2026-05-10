@@ -53,6 +53,8 @@ jobs:
         run: dotnet restore "$SHARED_PROJ"
 
       # publish надёжнее отдаёт .ipa для Single Project MAUI
+      # Образ macos-latest иногда отстаёт от Xcode на один патч — workload уже требует 26.4.
+      # ValidateXcodeVersion=false: см. https://learn.microsoft.com/en-us/dotnet/ios/troubleshooting/xcode-requirement
       - name: Publish IPA
         run: |
           dotnet publish "$MAIN_PROJ" \
@@ -60,6 +62,7 @@ jobs:
             -c Release \
             -p:RuntimeIdentifier=ios-arm64 \
             -p:BuildIpa=true \
+            -p:ValidateXcodeVersion=false \
             -p:CodesignKey="-" \
             -p:CodesignProvision="" \
             -p:EnableCodeSigning=false \
