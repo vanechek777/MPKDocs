@@ -1,19 +1,9 @@
+/*
+ * Точечные переопределения MAUI host; основной стиль — _content/MPKDocumentsMAUI.Shared/app.css
+ * Раньше здесь была полоса #f7f7f7 под статус-бар — на тёмном экране входа выглядела как «белая вставка».
+ * Safe area обрабатываем в Shared (auth-page, page-content), отдельный блок не красим в светлый.
+ */
+
 .status-bar-safe-area {
     display: none;
-}
-
-@supports (-webkit-touch-callout: none) {
-    .status-bar-safe-area {
-        display: flex;
-        position: sticky;
-        top: 0;
-        height: env(safe-area-inset-top);
-        background-color: #f7f7f7;
-        width: 100%;
-        z-index: 1;
-    }
-
-    .flex-column, .navbar-brand {
-        padding-left: env(safe-area-inset-left);
-    }
 }

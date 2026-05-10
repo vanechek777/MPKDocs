@@ -19,7 +19,7 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<IMobileShellService, MobileShellService>();
             builder.Services.AddSingleton<IDocumentFilePicker, NullDocumentFilePicker>();
-            builder.Services.AddSingleton(_ => new ApiOptions { BaseUrl = "http://localhost:8000" });
+            builder.Services.AddSingleton(new ApiOptions());
             builder.Services.AddSingleton<INotificationPermissionService, WebNotificationPermissionService>();
 
             var app = builder.Build();

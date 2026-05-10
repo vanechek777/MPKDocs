@@ -30,5 +30,10 @@
     <string>Assets.xcassets/appicon.appiconset</string>
     <key>NSUserNotificationsUsageDescription</key>
     <string>Уведомления о документах на подпись и статусе маршрута.</string>
+    <!-- Светлые иконки в строке состояния на тёмном фоне WebView -->
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
+    <key>UIStatusBarStyle</key>
+    <string>UIStatusBarStyleLightContent</string>
 </dict>
 </plist>

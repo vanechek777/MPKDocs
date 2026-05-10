@@ -1,8 +1,4 @@
-cd C:\Users\vania\source\repos\MPKDocumentsMAUI\MPKDocumentsAPI
-Remove-Item -Recurse -Force .venvpy -3.12 -m venv .venv
-.\.venv\Scripts\python -m pip install --upgrade pip
-.\.venv\Scripts\python -m pip uninstall -y jose
-.\.venv\Scripts\python -m pip install -r requirements.txt## MPKDocumentsAPI (FastAPI)
+## MPKDocumentsAPI (FastAPI)
 
 ### Setup
 
@@ -65,4 +61,12 @@ Test user:
 - `POST /auth/otp/send` (Bearer) → SMS (`SMS_PROVIDER`: для РФ **smsc** или **smsru**)
 - `GET /users/me` (Bearer)
 - `GET /documents/recent` (Bearer)
+
+### Продакшен (клиенты MAUI / Web)
+
+Публичный API: **`https://mpk-docs.ru.tuna.am`** (без порта — обычно за reverse proxy: nginx/Caddy).
+
+На сервере задайте в `.env` реальную БД, `JWT_SECRET`, SMS/SMTP и т.д. FastAPI можно поднять за прокси с TLS; CORS уже разрешён для любых источников (`*`).
+
+Клиентское приложение берёт базовый URL из `MPKDocumentsMAUI.Shared.Api.ApiOptions.BaseUrl` (по умолчанию совпадает с адресом выше).
 

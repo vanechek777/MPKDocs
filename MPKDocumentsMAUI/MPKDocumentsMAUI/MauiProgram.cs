@@ -28,15 +28,10 @@ namespace MPKDocumentsMAUI
             builder.Services.AddMauiBlazorWebView();
 
             // API + auth
-            builder.Services.AddSingleton<ApiOptions>(_ =>
-            {
-                // Android emulator can't reach localhost directly
-                var baseUrl =
-                    DeviceInfo.Platform == DevicePlatform.Android
-                        ? "http://10.0.2.2:8000"
-                        : "http://localhost:8000";
-                return new ApiOptions { BaseUrl = baseUrl };
-            });
+            // Читает базовый URL из ApiOptions по умолчанию (продакшен).
+            // Локально: builder.Services.AddSingleton(new ApiOptions { BaseUrl = "http://localhost:8000" });
+            // Эмулятор Android к хосту: http://10.0.2.2:8000
+            builder.Services.AddSingleton(new ApiOptions());
             builder.Services.AddSingleton<HttpClient>();
             builder.Services.AddSingleton<IAuthTokenStore, SecureAuthTokenStore>();
             builder.Services.AddSingleton<AuthApiClient>();
