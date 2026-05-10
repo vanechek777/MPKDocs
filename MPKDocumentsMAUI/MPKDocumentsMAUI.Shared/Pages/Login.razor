@@ -2,7 +2,6 @@
 @layout MPKDocumentsMAUI.Shared.Layout.AuthLayout
 
 @using System.ComponentModel.DataAnnotations
-@using Microsoft.AspNetCore.Components.Authorization
 @inject NavigationManager Nav
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
@@ -12,7 +11,7 @@
         <div class="auth-brand">
             <div>
                 <h2 class="auth-title">Вход</h2>
-                <div class="auth-subtitle">МПК Документы</div>
+                <div class="auth-subtitle">МПК Документы — код на почте</div>
             </div>
         </div>
 
@@ -21,78 +20,146 @@
             <div class="auth-error">@_error</div>
         }
 
-        <div class="form-group">
-            <label class="form-label">Телефон</label>
-            <InputText class="form-input" @bind-Value="_model.PhoneNumber" placeholder="+79148012594" />
-        </div>
+        @if (_step == LoginStep.Email)
+        {
+            <div class="form-group">
+                <label class="form-label">Электронная почта</label>
+                <InputText class="form-input" type="email" autocomplete="username"
+                           @bind-Value="_email" placeholder="you@company.ru" />
+                <div class="form-hint-muted">Придёт одноразовый код входа на этот адрес.</div>
+            </div>
 
-        <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">Пароль</label>
-            <InputText class="form-input" @bind-Value="_model.Password" type="password" />
-        </div>
+            <div class="auth-actions">
+                <button class="btn btn-green" disabled="@_busyCode" type="button" @onclick="SendCodeAsync">
+                    @if (_busyCode)
+                    {
+                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Отправляем…</span></span>
+                    }
+                    else
+                    {
+                        <span>Отправить код</span>
+                    }
+                </button>
+                <button class="btn btn-outline" type="button" @onclick="GoRegister">
+                    Регистрация
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="form-group">
+                <label class="form-label">Код из письма</label>
+                <InputText class="form-input mpk-email-code-field" maxlength="12" inputmode="numeric" autocomplete="one-time-code"
+                           @bind-Value="_code" placeholder="######" />
+                <div class="form-hint-muted">Письмо отправлено на <strong>@_email.Trim()</strong>
+                    · <button type="button" class="auth-inline-link" @onclick="GoStepEmailAsync">Изменить</button></div>
+            </div>
 
-        <div class="auth-actions">
-            <button class="btn btn-green" disabled="@_busy" type="button" @onclick="OnLoginClick">
-                @if (_busy)
-                {
-                    <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Входим…</span></span>
-                }
-                else
-                {
-                    <span>Войти</span>
-                }
-            </button>
-            <button class="btn btn-outline" type="button" @onclick="GoRegister">
-                Регистрация
-            </button>
-        </div>
+            @if (!string.IsNullOrEmpty(_lastDevLoginCode))
+            {
+                <div class="auth-dev-hint">Тест-сервер: код <strong>@_lastDevLoginCode</strong></div>
+            }
+
+            <div class="auth-actions auth-actions-row">
+                <button class="btn btn-outline" disabled="@_busyLogin" type="button" @onclick="SendCodeAgainAsync">Код ещё раз</button>
+                <button class="btn btn-green" disabled="@(_busyLogin || string.IsNullOrWhiteSpace(_code))" type="button" @onclick="VerifyAndLoginAsync">
+                    @if (_busyLogin)
+                    {
+                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Входим…</span></span>
+                    }
+                    else
+                    {
+                        <span>Войти</span>
+                    }
+                </button>
+            </div>
+
+            <div class="auth-secondary-link">
+                <button type="button" class="auth-inline-link" @onclick="GoRegister">Регистрация</button>
+            </div>
+        }
     </div>
 </div>
 
 @code {
-    private bool _busy;
+    private enum LoginStep { Email, Code }
+
+    private LoginStep _step = LoginStep.Email;
+    private bool _busyCode;
+    private bool _busyLogin;
     private string? _error;
-    private LoginModel _model = new();
+    private string _email = "";
+    private string _code = "";
+    private string? _lastDevLoginCode;
 
-    private async Task OnLoginClick()
+    private async Task SendCodeAsync()
     {
-        if (_busy) return;
-
+        if (_busyCode) return;
         _error = null;
-
-        if (string.IsNullOrWhiteSpace(_model.PhoneNumber) || string.IsNullOrWhiteSpace(_model.Password))
+        if (string.IsNullOrWhiteSpace(_email))
         {
-            _error = "Заполни телефон и пароль.";
+            _error = "Укажи email.";
+            return;
+        }
+        if (!_email.Contains('@', StringComparison.Ordinal))
+        {
+            _error = "Введите корректный email.";
             return;
         }
 
-        _busy = true;
+        _busyCode = true;
         try
         {
-            await Auth.LoginAsync(_model.PhoneNumber, _model.Password);
+            var r = await Auth.SendEmailLoginCodeAsync(_email);
+            _lastDevLoginCode = string.IsNullOrWhiteSpace(r.DevCode) ? null : r.DevCode.Trim();
+            _step = LoginStep.Code;
+            _code = "";
+        }
+        catch (Exception ex)
+        {
+            _error = string.IsNullOrWhiteSpace(ex.Message) ? "Не удалось отправить код. Проверь API и email." : ex.Message;
+        }
+        finally
+        {
+            _busyCode = false;
+        }
+    }
+
+    private async Task SendCodeAgainAsync()
+    {
+        if (_busyLogin) return;
+        await SendCodeAsync();
+    }
+
+    private async Task VerifyAndLoginAsync()
+    {
+        if (_busyLogin || string.IsNullOrWhiteSpace(_code)) return;
+        _error = null;
+        _busyLogin = true;
+        try
+        {
+            await Auth.LoginWithEmailCodeAsync(_email, _code);
             Nav.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/", replace: true);
         }
         catch (Exception ex)
         {
             _error = string.IsNullOrWhiteSpace(ex.Message)
-                ? "Не удалось войти. Проверь телефон/пароль и что API запущено."
-                : $"Не удалось войти: {ex.Message}";
+                ? "Неверный или просроченный код."
+                : ex.Message;
         }
         finally
         {
-            _busy = false;
+            _busyLogin = false;
         }
     }
 
-    private void GoRegister() => Nav.NavigateTo("/register");
-
-    private sealed class LoginModel
+    private void GoStepEmailAsync()
     {
-        [Required]
-        public string PhoneNumber { get; set; } = "";
-
-        [Required]
-        public string Password { get; set; } = "";
+        _step = LoginStep.Email;
+        _code = "";
+        _error = null;
+        _lastDevLoginCode = null;
     }
-}
 
+    private void GoRegister() => Nav.NavigateTo("/register");
+}

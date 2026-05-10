@@ -33,19 +33,30 @@ public sealed class AuthService
         }
     }
 
-    public async Task LoginAsync(string phoneNumber, string password)
+    public Task<EmailCodeSendResponse> SendEmailLoginCodeAsync(string email) =>
+        _api.SendEmailLoginCodeAsync(new EmailLoginSendRequest(NormalizeEmail(email)));
+
+    public async Task LoginWithEmailCodeAsync(string email, string code)
     {
-        var token = await _api.LoginAsync(new LoginRequest(phoneNumber, password));
+        var token = await _api.VerifyEmailLoginAsync(
+            new EmailLoginVerifyRequest(NormalizeEmail(email), code.Trim()));
         await _tokenStore.SetAccessTokenAsync(token.access_token);
         _authState.NotifyAuthChanged();
     }
 
-    public async Task RegisterAsync(string phoneNumber, string fullName, string password, string email)
+    public Task<EmailCodeSendResponse> SendRegisterEmailCodeAsync(string phoneNumber, string fullName,
+        string password, string email) =>
+        _api.SendRegisterEmailCodeAsync(new RegisterRequest(phoneNumber, fullName, password, NormalizeEmail(email)));
+
+    public async Task CompleteRegistrationWithEmailCodeAsync(string email, string code)
     {
-        var token = await _api.RegisterAsync(new RegisterRequest(phoneNumber, fullName, password, email));
+        var token = await _api.VerifyRegisterEmailAsync(
+            new RegisterEmailVerifyRequest(NormalizeEmail(email), code.Trim()));
         await _tokenStore.SetAccessTokenAsync(token.access_token);
         _authState.NotifyAuthChanged();
     }
+
+    private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
     public async Task<MeResponse> GetMeAsync(CancellationToken ct = default) =>
         await _api.MeAsync(ct);

@@ -82,6 +82,52 @@ public sealed class AuthApiClient
         return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
     }
 
+    /// <summary>Отправить код входа на email.</summary>
+    public async Task<EmailCodeSendResponse> SendEmailLoginCodeAsync(EmailLoginSendRequest req,
+        CancellationToken ct = default)
+    {
+        var res = await _http.PostAsJsonAsync(U("/auth/email/login/send"), req, ct);
+        if (!res.IsSuccessStatusCode)
+            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+
+        return (await res.Content.ReadFromJsonAsync<EmailCodeSendResponse>(cancellationToken: ct))
+               ?? new EmailCodeSendResponse(Ok: true, DevCode: null);
+    }
+
+    /// <summary>Обмен кода входа на JWT.</summary>
+    public async Task<TokenResponse> VerifyEmailLoginAsync(EmailLoginVerifyRequest req,
+        CancellationToken ct = default)
+    {
+        var res = await _http.PostAsJsonAsync(U("/auth/email/login/verify"), req, ct);
+        if (!res.IsSuccessStatusCode)
+            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+
+        return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
+    }
+
+    /// <summary>Отправить код подтверждения регистрации на email (аккаунт активируется после verify).</summary>
+    public async Task<EmailCodeSendResponse> SendRegisterEmailCodeAsync(RegisterRequest pending,
+        CancellationToken ct = default)
+    {
+        var res = await _http.PostAsJsonAsync(U("/auth/email/register/start"), pending, ct);
+        if (!res.IsSuccessStatusCode)
+            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+
+        return (await res.Content.ReadFromJsonAsync<EmailCodeSendResponse>(cancellationToken: ct))
+               ?? new EmailCodeSendResponse(Ok: true, DevCode: null);
+    }
+
+    /// <summary>Завершить регистрацию по коду с почты, получить JWT.</summary>
+    public async Task<TokenResponse> VerifyRegisterEmailAsync(RegisterEmailVerifyRequest req,
+        CancellationToken ct = default)
+    {
+        var res = await _http.PostAsJsonAsync(U("/auth/email/register/verify"), req, ct);
+        if (!res.IsSuccessStatusCode)
+            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+
+        return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
+    }
+
     public async Task<MeResponse> MeAsync(CancellationToken ct = default)
     {
         await AttachAuthAsync();

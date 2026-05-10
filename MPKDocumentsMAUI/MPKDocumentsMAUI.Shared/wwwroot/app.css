@@ -2103,6 +2103,57 @@ body:has(.auth-page) .app-main {
     z-index: 6;
 }
 
+.auth-actions-row {
+    grid-template-columns: 1fr 1fr;
+}
+
+.form-hint-muted {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    margin-top: 8px;
+    line-height: 1.35;
+}
+
+.auth-inline-link {
+    border: none;
+    background: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: #c96565;
+    text-decoration: underline;
+    font: inherit;
+    font-weight: 600;
+}
+
+html.mpk-theme-light .auth-inline-link {
+    color: var(--accent-maroon);
+}
+
+.auth-dev-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+html.mpk-theme-light .auth-dev-hint {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.auth-secondary-link {
+    margin-top: 14px;
+    text-align: center;
+}
+
+.mpk-email-code-field {
+    font-size: 22px !important;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+}
+
 /* Safety: ensure auth UI always receives clicks */
 .auth-page,
 .auth-page * {

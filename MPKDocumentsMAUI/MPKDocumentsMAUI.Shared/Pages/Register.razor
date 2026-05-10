@@ -11,7 +11,7 @@
         <div class="auth-brand">
             <div>
                 <h2 class="auth-title">Регистрация</h2>
-                <div class="auth-subtitle">МПК Документы</div>
+                <div class="auth-subtitle">МПК Документы — подтверждение почты кодом</div>
             </div>
         </div>
 
@@ -20,74 +20,177 @@
             <div class="auth-error">@_error</div>
         }
 
-        <EditForm Model="_model" OnValidSubmit="OnSubmit">
-            <DataAnnotationsValidator />
+        @if (_step == RegisterStep.Form)
+        {
+            <EditForm Model="_model" OnValidSubmit="SendCodeFromFormAsync">
+                <DataAnnotationsValidator />
 
+                <div class="form-group">
+                    <label class="form-label">ФИО</label>
+                    <InputText class="form-input" @bind-Value="_model.FullName" placeholder="Иванов Иван Иванович" />
+                    <ValidationMessage For="() => _model.FullName" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Телефон</label>
+                    <InputText class="form-input" @bind-Value="_model.PhoneNumber" placeholder="+79990000005" />
+                    <ValidationMessage For="() => _model.PhoneNumber" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <InputText class="form-input" @bind-Value="_model.Email" type="email" autocomplete="email" placeholder="user@yandex.ru" />
+                    <ValidationMessage For="() => _model.Email" />
+                    <div class="form-hint-muted">На этот адрес придёт код для завершения регистрации.</div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Пароль</label>
+                    <InputText class="form-input" @bind-Value="_model.Password" type="password" autocomplete="new-password" />
+                    <ValidationMessage For="() => _model.Password" />
+                </div>
+
+                <div class="auth-actions">
+                    <button class="btn btn-green" disabled="@_busy" type="submit">
+                        @if (_busy)
+                        {
+                            <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Отправляем код…</span></span>
+                        }
+                        else
+                        {
+                            <span>Отправить код на почту</span>
+                        }
+                    </button>
+                    <button class="btn btn-outline" type="button" @onclick="GoLogin">
+                        Уже есть аккаунт? Войти
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else
+        {
             <div class="form-group">
-                <label class="form-label">ФИО</label>
-                <InputText class="form-input" @bind-Value="_model.FullName" placeholder="Иванов Иван Иванович" />
-                <ValidationMessage For="() => _model.FullName" />
+                <label class="form-label">Код из письма</label>
+                <InputText class="form-input mpk-email-code-field" maxlength="12" inputmode="numeric" autocomplete="one-time-code"
+                           @bind-Value="_code" placeholder="######" />
+                <div class="form-hint-muted">
+                    Адрес: <strong>@_model.Email.Trim()</strong>
+                    · <button type="button" class="auth-inline-link" @onclick="BackToFormAsync">Изменить данные</button>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Телефон</label>
-                <InputText class="form-input" @bind-Value="_model.PhoneNumber" placeholder="+79990000005" />
-                <ValidationMessage For="() => _model.PhoneNumber" />
-            </div>
+            @if (!string.IsNullOrEmpty(_lastDevRegisterCode))
+            {
+                <div class="auth-dev-hint">Тест-сервер: код <strong>@_lastDevRegisterCode</strong></div>
+            }
 
-            <div class="form-group">
-                <label class="form-label">ОБЯЗАТЕЛЬНО! Email используется для получения кодов подтверждения</label>
-                <InputText class="form-input" @bind-Value="_model.Email" type="email" placeholder="user@yandex.ru" />
-                <ValidationMessage For="() => _model.Email" />
-            </div>
-
-            <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Пароль</label>
-                <InputText class="form-input" @bind-Value="_model.Password" type="password" />
-                <ValidationMessage For="() => _model.Password" />
-            </div>
-
-            <div class="auth-actions">
-                <button class="btn btn-green" disabled="@_busy" type="submit">
-                    @if (_busy)
+            <div class="auth-actions auth-actions-row">
+                <button class="btn btn-outline" disabled="@_busyVerify" type="button" @onclick="ResendRegisterCodeAsync">Код ещё раз</button>
+                <button class="btn btn-green" disabled="@(_busyVerify || string.IsNullOrWhiteSpace(_code))" type="button" @onclick="VerifyRegisterAsync">
+                    @if (_busyVerify)
                     {
                         <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Создаём…</span></span>
                     }
                     else
                     {
-                        <span>Зарегистрироваться</span>
+                        <span>Подтвердить регистрацию</span>
                     }
                 </button>
-                <button class="btn btn-outline" type="button" @onclick="GoLogin">
-                    Уже есть аккаунт? Войти
-                </button>
             </div>
-        </EditForm>
+
+            <div class="auth-secondary-link">
+                <button type="button" class="auth-inline-link" @onclick="GoLogin">Уже есть аккаунт? Войти</button>
+            </div>
+        }
     </div>
 </div>
 
 @code {
+    private enum RegisterStep { Form, Code }
+
+    private RegisterStep _step = RegisterStep.Form;
     private bool _busy;
+    private bool _busyVerify;
     private string? _error;
+    private string _code = "";
+    private string? _lastDevRegisterCode;
+
     private RegisterModel _model = new();
 
-    private async Task OnSubmit()
+    private async Task SendCodeFromFormAsync()
     {
+        if (_busy) return;
         _error = null;
         _busy = true;
         try
         {
-            await Auth.RegisterAsync(_model.PhoneNumber, _model.FullName, _model.Password, _model.Email.Trim());
-            Nav.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/", replace: true);
+            var r = await Auth.SendRegisterEmailCodeAsync(_model.PhoneNumber, _model.FullName, _model.Password,
+                _model.Email.Trim());
+            _lastDevRegisterCode = string.IsNullOrWhiteSpace(r.DevCode) ? null : r.DevCode.Trim();
+            _step = RegisterStep.Code;
+            _code = "";
         }
-        catch
+        catch (Exception ex)
         {
-            _error = "Не удалось зарегистрироваться. Телефон или email уже заняты, либо данные указаны неверно.";
+            _error = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Не удалось отправить код. Возможно, email уже занят или API недоступно."
+                : ex.Message;
         }
         finally
         {
             _busy = false;
         }
+    }
+
+    private async Task ResendRegisterCodeAsync()
+    {
+        if (_busyVerify) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var r = await Auth.SendRegisterEmailCodeAsync(_model.PhoneNumber, _model.FullName, _model.Password,
+                _model.Email.Trim());
+            _lastDevRegisterCode = string.IsNullOrWhiteSpace(r.DevCode) ? null : r.DevCode.Trim();
+        }
+        catch (Exception ex)
+        {
+            _error = string.IsNullOrWhiteSpace(ex.Message) ? "Не удалось отправить код повторно." : ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task VerifyRegisterAsync()
+    {
+        if (_busyVerify || string.IsNullOrWhiteSpace(_code)) return;
+        _busyVerify = true;
+        _error = null;
+        try
+        {
+            await Auth.CompleteRegistrationWithEmailCodeAsync(_model.Email, _code);
+            Nav.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Неверный или просроченный код регистрации."
+                : ex.Message;
+        }
+        finally
+        {
+            _busyVerify = false;
+        }
+    }
+
+    private void BackToFormAsync()
+    {
+        _step = RegisterStep.Form;
+        _code = "";
+        _error = null;
+        _lastDevRegisterCode = null;
     }
 
     private void GoLogin() => Nav.NavigateTo("/login");
@@ -108,4 +211,3 @@
         public string Password { get; set; } = "";
     }
 }
-

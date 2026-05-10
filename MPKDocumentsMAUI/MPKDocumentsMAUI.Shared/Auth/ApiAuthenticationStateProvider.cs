@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using MPKDocumentsMAUI.Shared.Api;
@@ -26,15 +27,16 @@ public sealed class ApiAuthenticationStateProvider : AuthenticationStateProvider
         try
         {
             var me = await _api.MeAsync();
-            var identity = new ClaimsIdentity(
-                new[]
-                {
-                    new Claim(ClaimTypes.NameIdentifier, me.id.ToString()),
-                    new Claim(ClaimTypes.Name, me.full_name),
-                    new Claim("phone_number", me.phone_number),
-                },
-                authenticationType: "jwt"
-            );
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, me.id.ToString()),
+                new(ClaimTypes.Name, me.full_name),
+                new("phone_number", me.phone_number),
+            };
+            if (!string.IsNullOrWhiteSpace(me.email))
+                claims.Add(new Claim(ClaimTypes.Email, me.email!));
+
+            var identity = new ClaimsIdentity(claims, authenticationType: "jwt");
             return new AuthenticationState(new ClaimsPrincipal(identity));
         }
         catch
