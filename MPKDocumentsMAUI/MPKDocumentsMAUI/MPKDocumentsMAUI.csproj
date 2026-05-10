@@ -64,6 +64,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.9" />
     <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.22" />
+    <PackageReference Include="ZXing.Net.Maui" Version="0.6.0" />
+    <PackageReference Include="ZXing.Net.Maui.Controls" Version="0.6.0" />
   </ItemGroup>
 
   <!-- Явная версия WebView2: обход известных сбоев инициализации BlazorWebView на WinUI (см. dotnet/maui#26003, WebView2Feedback#5104). -->

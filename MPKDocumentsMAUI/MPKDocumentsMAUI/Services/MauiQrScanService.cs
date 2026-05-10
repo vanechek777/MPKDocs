@@ -1,4 +1,6 @@
+#if WINDOWS
 using Microsoft.Maui.Media;
+#endif
 using MPKDocumentsMAUI.Shared.Services;
 using SkiaSharp;
 using ZXing.SkiaSharp;
@@ -25,7 +27,16 @@ public sealed class MauiQrScanService : IQrScanService
         }
     }
 
-    public async Task<string?> ScanQrFromCameraAsync(CancellationToken cancellationToken = default)
+    public Task<string?> ScanQrFromCameraAsync(CancellationToken cancellationToken = default) =>
+#if WINDOWS
+        ScanWithSinglePhotoFallbackAsync(cancellationToken);
+#else
+        ScanWithLiveCameraAsync(cancellationToken);
+#endif
+
+#if WINDOWS
+
+    private static async Task<string?> ScanWithSinglePhotoFallbackAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -43,7 +54,9 @@ public sealed class MauiQrScanService : IQrScanService
 
             if (photo is null) return null;
             await using var stream = await photo.OpenReadAsync();
-            return DecodeQrFromImageStream(stream);
+            var reader = new BarcodeReader();
+            using var sk = SKBitmap.Decode(stream);
+            return sk is null ? null : reader.Decode(sk)?.Text;
         }
         catch (OperationCanceledException)
         {
@@ -54,4 +67,53 @@ public sealed class MauiQrScanService : IQrScanService
             return null;
         }
     }
+
+#else
+
+    /// <remarks>Открывает нативную <see cref="QrScannerPage"/> с живой камерой (iOS/Android/MacCatalyst).</remarks>
+    private static async Task<string?> ScanWithLiveCameraAsync(CancellationToken cancellationToken)
+    {
+        var host = ResolveHostPage();
+        if (host is null)
+            return null;
+
+        var tcs = new TaskCompletionSource<string?>();
+        var page = new QrScannerPage(tcs);
+
+        await MainThread.InvokeOnMainThreadAsync(() => host.Navigation.PushModalAsync(page));
+
+        try
+        {
+            return await tcs.Task.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                try
+                {
+                    if (host.Navigation.ModalStack.Count > 0)
+                        await host.Navigation.PopModalAsync(animated: false);
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            });
+            return null;
+        }
+    }
+
+    private static Page? ResolveHostPage()
+    {
+        var root = Application.Current?.Windows.FirstOrDefault()?.Page;
+        return root switch
+        {
+            NavigationPage nav => nav.CurrentPage ?? nav,
+            { } page => page,
+            _ => null
+        };
+    }
+
+#endif
 }

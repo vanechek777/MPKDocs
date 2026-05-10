@@ -4,6 +4,7 @@ using MPKDocumentsMAUI.Shared.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using MPKDocumentsMAUI.Shared.Auth;
 using MPKDocumentsMAUI.Shared.Api;
+using ZXing.Net.Maui.Controls;
 
 namespace MPKDocumentsMAUI
 {
@@ -14,6 +15,7 @@ namespace MPKDocumentsMAUI
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()
+                .UseBarcodeReader()
                 .ConfigureFonts(_ => { });
 
             // Add device-specific services used by the MPKDocumentsMAUI.Shared project

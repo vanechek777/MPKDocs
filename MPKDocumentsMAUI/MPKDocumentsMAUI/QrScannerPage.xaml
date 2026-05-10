@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
+             x:Class="MPKDocumentsMAUI.QrScannerPage"
+             Shell.NavBarIsVisible="False"
+             NavigationPage.HasNavigationBar="False"
+             BackgroundColor="Black">
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- Камера на весь экран -->
+        <zxing:CameraBarcodeReaderView x:Name="CameraView"
+                                       Grid.RowSpan="2"
+                                       HorizontalOptions="Fill"
+                                       VerticalOptions="Fill"
+                                       BarcodesDetected="OnBarcodesDetected" />
+
+        <!-- Оверлей: верх/центр прозрачны для касаний (камера), низ — кнопки -->
+        <Grid Grid.RowSpan="2" RowDefinitions="Auto,*,Auto">
+
+            <!-- Подсказка сверху -->
+            <Border Grid.Row="0"
+                    InputTransparent="True"
+                    Margin="0,52,0,0"
+                    Padding="16,10"
+                    HorizontalOptions="Center"
+                    StrokeThickness="0"
+                    BackgroundColor="#CC1C1C1E">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="18" />
+                </Border.StrokeShape>
+                <Label Text="Наведите камеру на QR"
+                       TextColor="White"
+                       FontSize="15"
+                       FontAttributes="Bold" />
+            </Border>
+
+            <!-- Рамка из углов (как на референсе) -->
+            <Grid Grid.Row="1"
+                  InputTransparent="True"
+                  VerticalOptions="Center"
+                  HorizontalOptions="Center"
+                  WidthRequest="260"
+                  HeightRequest="260">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="56" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="56" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="56" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="56" />
+                </Grid.ColumnDefinitions>
+
+                <!-- верхний левый -->
+                <Grid Grid.Row="0" Grid.Column="0">
+                    <Line X1="8" Y1="8" X2="48" Y2="8"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                    <Line X1="8" Y1="8" X2="8" Y2="48"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                </Grid>
+                <!-- верхний правый -->
+                <Grid Grid.Row="0" Grid.Column="2" WidthRequest="56" HeightRequest="56">
+                    <Line X1="46" Y1="12" X2="12" Y2="12"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                    <Line X1="46" Y1="12" X2="46" Y2="44"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                </Grid>
+                <!-- нижний левый -->
+                <Grid Grid.Row="2" Grid.Column="0" WidthRequest="56" HeightRequest="56">
+                    <Line X1="12" Y1="44" X2="44" Y2="44"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                    <Line X1="12" Y1="44" X2="12" Y2="12"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                </Grid>
+                <!-- нижний правый -->
+                <Grid Grid.Row="2" Grid.Column="2" WidthRequest="56" HeightRequest="56">
+                    <Line X1="12" Y1="44" X2="46" Y2="44"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                    <Line X1="46" Y1="44" X2="46" Y2="12"
+                          Stroke="White"
+                          StrokeThickness="4"
+                          StrokeLineCap="Round" />
+                </Grid>
+            </Grid>
+
+            <!-- Нижняя панель -->
+            <Grid Grid.Row="2"
+                  Padding="20,14,20,28"
+                  ColumnDefinitions="Auto,*,Auto"
+                  BackgroundColor="#CC000000"
+                  VerticalOptions="End">
+                <!-- Закрыть -->
+                <Border Grid.Column="0"
+                        WidthRequest="52"
+                        HeightRequest="52"
+                        StrokeThickness="0"
+                        BackgroundColor="#F5F5F5">
+                    <Border.StrokeShape>
+                        <Ellipse />
+                    </Border.StrokeShape>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnCloseTapped" />
+                    </Border.GestureRecognizers>
+                    <Label Text="✕"
+                           TextColor="#111111"
+                           FontSize="20"
+                           VerticalOptions="Center"
+                           HorizontalOptions="Center" />
+                </Border>
+
+                <!-- Ввод вручную / в номер из референса -->
+                <VerticalStackLayout Grid.Column="1"
+                                     Spacing="2"
+                                     VerticalOptions="Center"
+                                     HorizontalOptions="Center">
+                    <VerticalStackLayout.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnManualTapped" />
+                    </VerticalStackLayout.GestureRecognizers>
+                    <Label Text="︿"
+                           TextColor="White"
+                           FontSize="13"
+                           HorizontalTextAlignment="Center"
+                           Margin="0,0,0,-4" />
+                    <Label Text="Ввести номер"
+                           TextColor="White"
+                           FontSize="14"
+                           FontAttributes="Bold"
+                           HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <!-- Фонарик -->
+                <Border Grid.Column="2"
+                        WidthRequest="52"
+                        HeightRequest="52"
+                        StrokeThickness="0"
+                        BackgroundColor="#F5F5F5">
+                    <Border.StrokeShape>
+                        <Ellipse />
+                    </Border.StrokeShape>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnTorchTapped" />
+                    </Border.GestureRecognizers>
+                    <Label Text="☀"
+                           TextColor="#111111"
+                           FontSize="22"
+                           VerticalOptions="Center"
+                           HorizontalOptions="Center" />
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentPage>

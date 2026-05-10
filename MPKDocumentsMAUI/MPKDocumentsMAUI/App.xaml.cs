@@ -9,7 +9,9 @@
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(new MainPage()) { Title = "MPKDocumentsMAUI" };
+            var main = new MainPage();
+            NavigationPage.SetHasNavigationBar(main, false);
+            return new Window(new NavigationPage(main)) { Title = "MPKDocumentsMAUI" };
         }
     }
 }
