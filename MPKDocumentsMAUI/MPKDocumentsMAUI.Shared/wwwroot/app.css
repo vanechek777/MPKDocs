@@ -1177,6 +1177,44 @@ a { color: var(--text-primary); text-decoration: none; }
     overflow: visible;
 }
 
+/* Подписанные: дата под зелёным бейджем, стрелка справа в ряд */
+.document-card--signed .doc-status {
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.document-card--signed .doc-status-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    min-width: 0;
+}
+
+.document-card--signed .doc-signed-date {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.25;
+    text-align: right;
+    max-width: 120px;
+}
+
+/* Иконка «получатель» в светлой теме */
+html.mpk-theme-light .doc-meta .author img.author-ico--receive {
+    opacity: 1;
+    filter: brightness(0) saturate(100%) opacity(0.55);
+}
+
+html.mpk-theme-light .doc-meta .author svg.author-ico {
+    color: #4a4a4a;
+    opacity: 0.88;
+}
+
+.doc-file-main .detail-download-spinner {
+    border-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+    border-top-color: color-mix(in srgb, var(--text-primary) 78%, transparent);
+}
+
 /* Status badges — цвета по ТЗ */
 .status-badge {
     padding: 5px 14px;
@@ -1646,6 +1684,42 @@ html.mpk-theme-light .modal-card .document-card {
     align-self: center; margin-top: 20px; flex-shrink: 0;
 }
 
+/* Узкий экран: схема подписантов столбцом + вертикальные связи (не уезжает за край) */
+@media (max-width: 560px) {
+    .signatures-flow {
+        flex-direction: column;
+        align-items: stretch;
+        overflow-x: visible;
+        max-width: 100%;
+        gap: 0;
+        padding-right: 2px;
+    }
+    .signatures-flow .sig-connector {
+        width: 2px;
+        height: 16px;
+        margin: 2px auto;
+        align-self: center;
+        margin-top: 0;
+        flex-shrink: 0;
+    }
+    .signatures-flow .sig-node {
+        min-width: 0;
+        max-width: 100%;
+        width: 100%;
+        align-items: stretch;
+    }
+    .signatures-flow .sig-node-card {
+        min-width: 0;
+        max-width: 100%;
+        text-align: left;
+        padding: var(--spacing-md);
+    }
+    .signatures-flow .sig-node-name {
+        white-space: normal;
+        word-break: break-word;
+    }
+}
+
 /* ============================================
    OTP CONFIRM MODAL
    ============================================ */
@@ -1729,6 +1803,12 @@ html.mpk-theme-light .modal-card .document-card {
 .signer-item {
     display: flex; align-items: center; gap: var(--spacing-sm);
     padding: var(--spacing-sm) 0; font-size: var(--font-size-sm);
+}
+.signer-item > span:last-child {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+    line-height: 1.35;
 }
 .signer-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .signer-dot.done { background: var(--status-signed); }
@@ -2454,6 +2534,24 @@ html.mpk-theme-light .lg-pill-bg {
     backdrop-filter: blur(24px) saturate(1.55) brightness(1.02);
     -webkit-backdrop-filter: blur(24px) saturate(1.55) brightness(1.02);
 }
+
+/* MAUI WebView (iOS): backdrop-filter часто гасится, если на том же слое SVG filter — оставляем «матовое стекло» */
+.app-shell--mobile-signing .lg-pill-bg {
+    filter: none !important;
+    background: rgba(34, 34, 36, 0.58);
+    backdrop-filter: blur(40px) saturate(1.8) brightness(1.06);
+    -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.06);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 6px 28px rgba(0, 0, 0, 0.42);
+}
+
+html.mpk-theme-light .app-shell--mobile-signing .lg-pill-bg {
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        0 8px 32px rgba(0, 0, 0, 0.12);
+}
 html.mpk-theme-light .lg-icon {
     filter: brightness(0) invert(0.30);
     opacity: 0.82;
@@ -2713,6 +2811,10 @@ html.mpk-theme-light .app-shell--mobile-signing .page-content .document-list .do
     min-width: 0;
 }
 
+.app-shell--mobile-signing .page-content {
+    overflow-x: hidden;
+}
+
 .app-shell--mobile-signing .detail-info-block,
 .app-shell--mobile-signing .doc-file-card {
     border: 1px solid var(--border-subtle);
@@ -2818,7 +2920,46 @@ html.mpk-theme-light .app-shell--mobile-signing .detail-info-block > .detail-fie
 }
 
 .app-shell--mobile-signing .page-content.detail-page-wrap {
-    padding-bottom: calc(var(--mpk-mobile-nav-h) + 28px);
+    padding-bottom: calc(var(--mpk-mobile-nav-h) + 56px);
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+.app-shell--mobile-signing .detail-page-wrap .detail-header {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.app-shell--mobile-signing .detail-page-wrap .detail-title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-shell--mobile-signing .detail-page-wrap .detail-layout {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.detail-field-value--status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.detail-signed-at {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    line-height: 1.35;
+}
+
+/* iOS: запас при прокрутке к низу, чтобы контент не прятался под плавающий бар */
+html:has(.app-shell--mobile-signing) {
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 100px);
 }
 
 .mpk-mobile-nav {

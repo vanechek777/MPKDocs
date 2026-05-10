@@ -62,16 +62,8 @@
     border-radius: 45px;
 }
 
-.lg-navbar--compact .lg-indicator {
-    top: 4px;
-    left: 4px;
-    width: 104px;
-    height: 46px;
-    border-radius: 23px;
-}
-
 .lg-navbar--compact ::deep .lg-nav-item {
-    border-radius: 23px;
+    border-radius: 999px;
 }
 
 .lg-navbar--compact .lg-icon {
@@ -142,18 +134,21 @@
 
 /* ------------------------------------------------------------------
    SLIDING GLASS INDICATOR
-   Ширина 138px × высота 69px (отступ 4px по вертикали).
-   Шаг translateX = слот ≈ 136.67px.
+   Размер и сдвиг от ширины родителя (.lg-pill-clip), чтобы на узких экранах
+   красная плашка не вылезала за скруглённые края pill.
    ------------------------------------------------------------------ */
 .lg-indicator {
     position: absolute;
     top: 4px;
     left: 4px;
-    width: 138px;
-    height: 69px;
-    border-radius: 35px;
+    width: calc((100% - 8px) / 3);
+    height: calc(100% - 8px);
+    border-radius: 999px;
     pointer-events: none;
     z-index: 0;
+
+    --lg-slot: calc((100% - 8px) / 3);
+    transform: translateX(0);
 
     /* Кнопка на навбаре: #FF0000 38% прозрачность */
     background: rgba(255, 0, 0, 0.38);
@@ -169,6 +164,14 @@
     transition: transform 0.42s cubic-bezier(0.34, 1.40, 0.64, 1);
 }
 
+.lg-indicator[data-lg-tab="home"] {
+    transform: translateX(var(--lg-slot));
+}
+
+.lg-indicator[data-lg-tab="profile"] {
+    transform: translateX(calc(var(--lg-slot) * 2));
+}
+
 /* ------------------------------------------------------------------
    NAV ITEMS (NavLink)
    ------------------------------------------------------------------ */
@@ -182,7 +185,7 @@
     height: 100%;
     text-decoration: none;
     cursor: pointer;
-    border-radius: 35px;
+    border-radius: 999px;
     transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 

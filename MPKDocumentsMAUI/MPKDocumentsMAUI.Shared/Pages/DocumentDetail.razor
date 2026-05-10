@@ -40,7 +40,7 @@
             <div class="detail-info-block">
                 <div class="detail-field">
                     <div class="detail-field-label">Отправитель:</div>
-                    <div class="detail-field-value">@initiatorName</div>
+                    <div class="detail-field-value" title="@initiatorName">@PersonDisplayName.Abbreviate(initiatorName)</div>
                 </div>
                 <div class="detail-field">
                     <div class="detail-field-label">Вид документа:</div>
@@ -48,8 +48,12 @@
                 </div>
                 <div class="detail-field">
                     <div class="detail-field-label">Статус:</div>
-                    <div class="detail-field-value">
+                    <div class="detail-field-value detail-field-value--status">
                         <span class="status-badge @StatusBadgeClass">@StatusText</span>
+                        @if (!string.IsNullOrWhiteSpace(documentSignedAtDisplay))
+                        {
+                            <div class="detail-signed-at">Подписано: @documentSignedAtDisplay</div>
+                        }
                     </div>
                 </div>
             </div>
@@ -81,7 +85,7 @@
                             {
                                 <div class="signer-item">
                                     <span class="signer-icon">@SignerIcon(s.Status)</span>
-                                    @($"{s.Order}. {s.Name} ({s.Department})")
+                                    <span title="@s.Name">@($"{s.Order}. {PersonDisplayName.Abbreviate(s.Name)} ({s.Department})")</span>
                                 </div>
                             }
                         </div>
@@ -99,8 +103,15 @@
                         <div class="file-name">@docName</div>
                         <div class="file-size">@attachmentSizeLabel</div>
                     </div>
-                    <button type="button" class="download-btn" title="Скачать файл" disabled="@(!hasFileAttachment || isBusy)" @onclick="DownloadAttachmentAsync">
-                        <img src="icons/download.png" alt="" style="width:20px;height:20px;opacity:0.7" />
+                    <button type="button" class="download-btn" title="Скачать файл" disabled="@(!hasFileAttachment || isBusy || isDownloadingAttachment)" @onclick="DownloadAttachmentAsync">
+                        @if (isDownloadingAttachment)
+                        {
+                            <span class="detail-download-spinner mpk-spinner mpk-spinner--md" role="status" aria-label="Загрузка"></span>
+                        }
+                        else
+                        {
+                            <img src="icons/download.png" alt="" style="width:20px;height:20px;opacity:0.7" />
+                        }
                     </button>
                 </div>
                 @if (myNepExportAvailable)
@@ -196,7 +207,7 @@
                 <div class="sig-node">
                     <div class="sig-node-dept">Создатель</div>
                     <div class="sig-node-card @(initiatorSignedTask ? "signed-node" : "pending-node")">
-                        <div class="sig-node-name">@initiatorName</div>
+                        <div class="sig-node-name" title="@initiatorName">@PersonDisplayName.Abbreviate(initiatorName)</div>
                         <div class="sig-node-status">@(initiatorSignedTask ? "Документ создан и подписан" : "Документ создан")</div>
                     </div>
                 </div>
@@ -206,7 +217,7 @@
                     <div class="sig-node">
                         <div class="sig-node-dept">@s.Department</div>
                         <div class="sig-node-card @GetSignerCardClass(idx)">
-                            <div class="sig-node-name">@s.Name</div>
+                            <div class="sig-node-name" title="@s.Name">@PersonDisplayName.Abbreviate(s.Name)</div>
                             <div class="sig-node-status">@GetSignerStatusText(idx)</div>
                         </div>
                     </div>
@@ -241,6 +252,8 @@
     private bool showOtp = false;
     private bool showSuccess = false;
     private bool otpSendBusy;
+    private bool isDownloadingAttachment;
+    private string? documentSignedAtDisplay;
     private string phoneOtpHint = "";
 
     private string _leaveRoute = "/signing";
@@ -298,7 +311,7 @@
     private async Task DownloadAttachmentAsync()
     {
         if (_docId is null || !hasFileAttachment) return;
-        isBusy = true;
+        isDownloadingAttachment = true;
         loadError = null;
         await InvokeAsync(StateHasChanged);
         try
@@ -317,9 +330,25 @@
         }
         finally
         {
-            isBusy = false;
+            isDownloadingAttachment = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private static string? ComputeSignedAtDisplay(DocumentDetailDto d)
+    {
+        if (!string.Equals(d.status, "SIGNED", StringComparison.OrdinalIgnoreCase))
+            return null;
+        List<DateTime> dates = [];
+        foreach (var s in d.signers)
+        {
+            if (!string.Equals(s.status, "SIGNED", StringComparison.OrdinalIgnoreCase) || s.processed_at is not { } t)
+                continue;
+            dates.Add(t);
+        }
+        if (dates.Count == 0)
+            return null;
+        return dates.Max().ToLocalTime().ToString("dd.MM.yyyy HH:mm", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
     }
 
     private async Task ViewNepCertificateAsync()
@@ -598,6 +627,8 @@
                     SignatureType: s.signature_type
                 ))
                 .ToList();
+
+            documentSignedAtDisplay = ComputeSignedAtDisplay(d);
 
             try
             {

@@ -6,6 +6,9 @@ using UserNotifications;
 
 namespace MPKDocumentsMAUI.Services;
 
+/// <summary>Разрешение на показ локальных/OS-уведомлений на устройстве.</summary>
+/// <remarks>Полноценные push (новый документ, документ подписан) нужны регистрация токена на бэкенде,
+/// канал Firebase Cloud Messaging или APNs/Notification Hubs и API-события на сервере — в этом репозитории только клиентское разрешение.</remarks>
 public sealed class NotificationPermissionService : INotificationPermissionService
 {
     public Task<bool> TryRequestNotificationPermissionAsync(CancellationToken ct = default)

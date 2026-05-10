@@ -37,7 +37,7 @@
             <div class="lg-pill-bg" style="filter: url(#lg-nav-filter)"></div>
 
             <!-- Слой 2: Скользящий стеклянный индикатор -->
-            <div class="lg-indicator" style="transform: translateX(@GetIndicatorOffset())"></div>
+            <div class="lg-indicator" data-lg-tab="@_activeTab"></div>
 
             <!-- Слой 3: Иконки -->
             <div class="lg-nav-items">
@@ -82,25 +82,6 @@
         else if (uri.Contains("profile", StringComparison.OrdinalIgnoreCase)) _activeTab = "profile";
         else _activeTab = "home";
     }
-
-    /** Шаг индикатора в px: (ширина pill − 8) / 3 — должно совпадать с .lg-navbar--compact / полным макетом в CSS */
-    private string GetIndicatorOffset()
-    {
-        var slotPx = IndicatorSlotPx;
-        return _activeTab switch
-        {
-            "signing" => "0px",
-            "profile" => FormatSlotPx(slotPx * 2),
-            _         => FormatSlotPx(slotPx)
-        };
-    }
-
-    /// <remarks>Стандартный макет 418px; компактный 320 — только мобильный MAUI-shell.</remarks>
-    private decimal IndicatorSlotPx =>
-        MobileShell.IsSigningOnlyShell ? 104m : (418m - 8m) / 3m;
-
-    private static string FormatSlotPx(decimal px) =>
-        px.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "px";
 
     private string MiddleHref => MobileShell.IsSigningOnlyShell ? "/verify-nep" : "";
 

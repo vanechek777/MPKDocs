@@ -129,7 +129,8 @@
     <div class="document-list">
         @foreach (var doc in FilteredUnsignedDocuments)
         {
-            <div class="document-card animate-in @(doc.WaitingForOthers ? "is-queue-waiting" : "")" style="animation-delay: @(doc.Index * 0.03)s"
+            <div class="document-card animate-in @(doc.WaitingForOthers ? "is-queue-waiting" : "")"
+                 style="animation-delay: @(doc.Index * 0.03)s"
                  @onclick="() => OpenUnsignedIfAllowed(doc)">
                 <div class="doc-icon">
                     <img src="icons/document.png" alt="PDF" />
@@ -149,7 +150,7 @@
                         <span>Получен: @doc.Date</span>
                         <span class="author" title="@doc.Author">
                             <img src="icons/receive_arrow.png" alt="" class="author-ico author-ico--receive" width="9" height="9" />
-                            <span class="doc-author-text">@doc.Author</span>
+                            <span class="doc-author-text">@PersonDisplayName.Abbreviate(doc.Author)</span>
                         </span>
                     </div>
                 </div>
@@ -174,7 +175,7 @@
     <div class="document-list">
         @foreach (var doc in FilteredSignedDocuments)
         {
-            <div class="document-card animate-in" style="animation-delay: @(doc.Index * 0.03)s"
+            <div class="document-card document-card--signed animate-in" style="animation-delay: @(doc.Index * 0.03)s"
                  @onclick="() => NavigateToDetail(doc.DocumentId)">
                 <div class="doc-icon">
                     <img src="icons/document.png" alt="PDF" />
@@ -194,18 +195,18 @@
                         <span>Получен: @doc.ReceivedDate</span>
                         <span class="author" title="@doc.Author">
                             <img src="icons/receive_arrow.png" alt="" class="author-ico author-ico--receive" width="9" height="9" />
-                            <span class="doc-author-text">@doc.Author</span>
+                            <span class="doc-author-text">@PersonDisplayName.Abbreviate(doc.Author)</span>
                         </span>
                     </div>
                 </div>
                 <div class="doc-status">
-                    <span class="status-badge @(doc.StatusClass)">@doc.StatusText</span>
-                    @if (!string.IsNullOrWhiteSpace(doc.SignedDate))
-                    {
-                        <div style="margin-top:6px;color:var(--text-tertiary);font-size:12px;text-align:right">
-                            @doc.SignedDate
-                        </div>
-                    }
+                    <div class="doc-status-stack">
+                        <span class="status-badge @(doc.StatusClass)">@doc.StatusText</span>
+                        @if (!string.IsNullOrWhiteSpace(doc.SignedDate))
+                        {
+                            <div class="doc-signed-date">@doc.SignedDate</div>
+                        }
+                    </div>
                     <svg class="doc-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="9 18 15 12 9 6"/>
                     </svg>
