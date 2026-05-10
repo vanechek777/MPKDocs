@@ -16,7 +16,7 @@
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
-    z-index: 100;
+    z-index: 180;
     width: 418px;
     height: 77px;
 }
@@ -68,10 +68,10 @@
     top: -24px; bottom: -24px; left: -24px; right: -24px;
     border-radius: 63px; /* Увеличиваем радиус скругления пропорционально отступу (39 + 24) */
     
-    /* Навбар: легкое затемнение и цветокоррекция (БЕЗ BLUR) для эффекта чистого стекла */
-    background: rgba(30, 30, 30, 0.40);
-    backdrop-filter: saturate(1.6) brightness(1.1);
-    -webkit-backdrop-filter: saturate(1.6) brightness(1.1);
+    /* Размытие фона + SVG-рефракция — на iOS WKWebView blur даёт «стекло», если filter слабый */
+    background: rgba(30, 30, 30, 0.42);
+    backdrop-filter: blur(22px) saturate(1.6) brightness(1.06);
+    -webkit-backdrop-filter: blur(22px) saturate(1.6) brightness(1.06);
     
     /* Искажает фон (рефракция)! */
     filter: url(#lg-nav-filter);

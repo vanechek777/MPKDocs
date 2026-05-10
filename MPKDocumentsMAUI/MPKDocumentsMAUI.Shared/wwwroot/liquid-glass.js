@@ -188,6 +188,34 @@
         attachFab(document.querySelector('.fab-btn'));
     }
 
+    function rebuildAll() {
+        scanAndAttach();
+        if (pillEl) {
+            const r = pillEl.getBoundingClientRect();
+            rebuildPill(Math.ceil(r.width), Math.ceil(r.height));
+        }
+        if (fabEl) {
+            const r = fabEl.getBoundingClientRect();
+            rebuildFab(Math.ceil(r.width), Math.ceil(r.height));
+        }
+    }
+
+    /** Для Blazor/WKWebView: первый кадр часто даёт нулевые размеры — откладываем и дублируем кадр. */
+    var _lgSched = null;
+    function scheduleLiquidGlassRebuild() {
+        if (_lgSched) clearTimeout(_lgSched);
+        _lgSched = setTimeout(function () {
+            _lgSched = null;
+            function run() {
+                rebuildAll();
+            }
+            requestAnimationFrame(function () {
+                requestAnimationFrame(run);
+            });
+            setTimeout(run, 200);
+        }, 45);
+    }
+
     function init() {
         scanAndAttach();
 
@@ -206,6 +234,13 @@
                 rebuildFab(Math.ceil(r.width), Math.ceil(r.height));
             }
         });
+
+        try {
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', scheduleLiquidGlassRebuild, { passive: true });
+                window.visualViewport.addEventListener('scroll', scheduleLiquidGlassRebuild, { passive: true });
+            }
+        } catch (_) {}
     }
 
     if (document.readyState === 'loading') {
@@ -214,20 +249,8 @@
         init();
     }
 
-    function rebuildAll() {
-        scanAndAttach();
-        if (pillEl) {
-            const r = pillEl.getBoundingClientRect();
-            rebuildPill(Math.ceil(r.width), Math.ceil(r.height));
-        }
-        if (fabEl) {
-            const r = fabEl.getBoundingClientRect();
-            rebuildFab(Math.ceil(r.width), Math.ceil(r.height));
-        }
-    }
-
     // Публичный API на случай ручного вызова из Blazor/DevTools
-    window.LiquidGlass = { rebuildAll };
+    window.LiquidGlass = { rebuildAll, scheduleLiquidGlassRebuild };
 
     // -------------------------------------------------------------
     // Popover positioning (keeps popovers inside viewport)
@@ -401,5 +424,6 @@
     window.MPKDocuments.bootstrapUxFromStorage = bootstrapUxFromStorage;
     window.MPKDocuments.tryHapticPulse = tryHapticPulse;
     window.MPKDocuments.applyCompactListsFromStored = applyCompactListsFromStored;
+    window.MPKDocuments.scheduleLiquidGlassRebuild = scheduleLiquidGlassRebuild;
     window.MPKDocuments.MPK_SETTINGS_KEYS = MPK_SETTINGS_KEYS;
 })();

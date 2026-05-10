@@ -1476,6 +1476,62 @@ a { color: var(--text-primary); text-decoration: none; }
     padding: var(--spacing-md) var(--spacing-xl);
 }
 
+/* Модалки: карточки списка в теме страницы, не мобильный тёмный градиент */
+.modal-card .document-list {
+    gap: 10px;
+}
+.modal-card .document-card {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-card-border);
+    border-bottom: 1px solid var(--glass-card-border);
+    background: var(--glass-card-bg);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.2);
+}
+
+html.mpk-theme-light .modal-card .document-card {
+    background: rgba(255, 255, 255, 0.99);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
+}
+
+.modal-card .doc-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.modal-card .doc-meta > span:first-of-type {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.modal-card .doc-meta .author {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    background: transparent !important;
+    border: none;
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-card .doc-meta .author .doc-author-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
 /* --- Buttons — цвета по ТЗ --- */
 .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm);
@@ -2394,9 +2450,9 @@ html.mpk-theme-light .lg-pill-clip {
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.10);
 }
 html.mpk-theme-light .lg-pill-bg {
-    background: rgba(248, 249, 252, 0.78);
-    backdrop-filter: saturate(1.55) brightness(1.02);
-    -webkit-backdrop-filter: saturate(1.55) brightness(1.02);
+    background: rgba(248, 249, 252, 0.72);
+    backdrop-filter: blur(24px) saturate(1.55) brightness(1.02);
+    -webkit-backdrop-filter: blur(24px) saturate(1.55) brightness(1.02);
 }
 html.mpk-theme-light .lg-icon {
     filter: brightness(0) invert(0.30);
@@ -2586,13 +2642,75 @@ html.mpk-theme-light .mpk-file-drop--over {
     gap: 10px;
 }
 
-.app-shell--mobile-signing .document-card {
-    border: 1px solid var(--border-subtle);
-    border-bottom: 1px solid var(--border-subtle);
+/* Только карточки списка на странице подписи — не модалки и не другие экраны */
+.app-shell--mobile-signing .page-content .document-list .document-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: linear-gradient(152deg, rgba(48, 32, 32, 0.42) 0%, rgba(18, 18, 22, 0.88) 52%, rgba(12, 12, 14, 0.95) 100%);
     backdrop-filter: blur(14px) saturate(1.25);
     -webkit-backdrop-filter: blur(14px) saturate(1.25);
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html.mpk-theme-light .app-shell--mobile-signing .page-content .document-list .document-card {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(246, 246, 249, 0.94) 100%);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    box-shadow:
+        0 10px 32px rgba(0, 0, 0, 0.07),
+        inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.app-shell--mobile-signing .page-content .document-list .document-card:active {
+    opacity: 0.96;
+}
+
+.app-shell--mobile-signing .page-content .document-list .doc-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.app-shell--mobile-signing .page-content .document-list .doc-meta > span:first-of-type {
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 12px;
+}
+
+html.mpk-theme-light .app-shell--mobile-signing .page-content .document-list .doc-meta > span:first-of-type {
+    color: var(--text-secondary);
+}
+
+.app-shell--mobile-signing .page-content .document-list .doc-meta .author {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+html.mpk-theme-light .app-shell--mobile-signing .page-content .document-list .doc-meta .author {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.app-shell--mobile-signing .page-content .document-list .doc-meta .author .doc-author-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .app-shell--mobile-signing .detail-info-block,
@@ -2606,12 +2724,44 @@ html.mpk-theme-light .mpk-file-drop--over {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+html.mpk-theme-light .app-shell--mobile-signing .detail-info-block,
+html.mpk-theme-light .app-shell--mobile-signing .doc-file-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.app-shell--mobile-signing .detail-info-block > .detail-field {
+    padding: 12px 0;
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.app-shell--mobile-signing .detail-info-block > .detail-field + .detail-field {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 14px;
+}
+
+html.mpk-theme-light .app-shell--mobile-signing .detail-info-block > .detail-field + .detail-field {
+    border-top-color: rgba(0, 0, 0, 0.07);
+}
+
 .app-shell--mobile-signing .detail-field-label {
     color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+    margin-bottom: 2px;
 }
 
 .app-shell--mobile-signing .detail-field-value {
     font-weight: 600;
+    font-size: 16px;
+    margin-top: 0;
+    line-height: 1.35;
 }
 
 .app-shell--mobile-signing .sig-node-card {
@@ -2665,6 +2815,10 @@ html.mpk-theme-light .mpk-file-drop--over {
 
 .app-shell--mobile-signing .wizard-back {
     bottom: calc(var(--mpk-mobile-nav-h) + 12px);
+}
+
+.app-shell--mobile-signing .page-content.detail-page-wrap {
+    padding-bottom: calc(var(--mpk-mobile-nav-h) + 28px);
 }
 
 .mpk-mobile-nav {
