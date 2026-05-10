@@ -106,8 +106,7 @@
                 @if (myNepExportAvailable)
                 {
                     <div class="detail-nep-actions">
-                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@isBusy" @onclick="DownloadNepEsigAsync">Скачать НЭП (.esig)</button>
-                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@isBusy" @onclick="PrintNepCertificateAsync">Печать НЭП</button>
+                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@isBusy" @onclick="ViewNepCertificateAsync">Просмотреть НЭП</button>
                     </div>
                 }
             </div>
@@ -323,33 +322,7 @@
         }
     }
 
-    private async Task DownloadNepEsigAsync()
-    {
-        if (_docId is null || !myNepExportAvailable) return;
-        isBusy = true;
-        loadError = null;
-        await InvokeAsync(StateHasChanged);
-        try
-        {
-            var body = await DocsApi.DownloadMyNepEsigAsync(_docId.Value);
-            var name = $"doc-{_docId.Value}-NEP.esig";
-            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
-            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
-            await mod.InvokeVoidAsync("downloadBase64", name, Convert.ToBase64String(body), "application/octet-stream");
-            await mod.DisposeAsync();
-        }
-        catch
-        {
-            loadError = "Не удалось скачать файл подписи.";
-        }
-        finally
-        {
-            isBusy = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task PrintNepCertificateAsync()
+    private async Task ViewNepCertificateAsync()
     {
         if (_docId is null || !myNepExportAvailable) return;
         try
@@ -367,12 +340,12 @@
                 myNepSignatureHex);
             var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-print.js").ToString();
             var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
-            await mod.InvokeVoidAsync("openPrintWindow", html);
+            await mod.InvokeVoidAsync("openHtmlPreview", html);
             await mod.DisposeAsync();
         }
         catch
         {
-            loadError = "Не удалось открыть окно печати.";
+            loadError = "Не удалось открыть свидетельство НЭП.";
             await InvokeAsync(StateHasChanged);
         }
     }

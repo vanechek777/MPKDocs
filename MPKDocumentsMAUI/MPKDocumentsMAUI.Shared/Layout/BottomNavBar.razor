@@ -1,5 +1,6 @@
 @using Microsoft.AspNetCore.Components.Routing
 @inject NavigationManager Navigation
+@inject IMobileShellService MobileShell
 @implements IDisposable
 
 <!-- SVG Liquid Glass фильтры — ВНЕ pill, глобально в DOM -->
@@ -44,7 +45,7 @@
                     <img src="icons/signing.png" alt="" class="lg-icon" />
                 </NavLink>
 
-                <NavLink class="lg-nav-item" href="" Match="NavLinkMatch.All">
+                <NavLink class="lg-nav-item" href="@MiddleHref" Match="@MiddleMatch">
                     <img src="icons/document.png" alt="" class="lg-icon" />
                 </NavLink>
 
@@ -73,10 +74,13 @@
 
     private void UpdateActiveTab(string uri)
     {
-        if (uri.Contains("signing") || uri.Contains("document") || uri.Contains("create-document"))
+        if (uri.Contains("signing", StringComparison.OrdinalIgnoreCase)
+            || uri.Contains("/document/", StringComparison.OrdinalIgnoreCase)
+            || uri.Contains("create-document", StringComparison.OrdinalIgnoreCase))
             _activeTab = "signing";
-        else if (uri.Contains("profile")) _activeTab = "profile";
-        else                               _activeTab = "home";
+        else if (uri.Contains("/verify-nep", StringComparison.OrdinalIgnoreCase)) _activeTab = "home";
+        else if (uri.Contains("profile", StringComparison.OrdinalIgnoreCase)) _activeTab = "profile";
+        else _activeTab = "home";
     }
 
     // Шаг = слот = (418 - 8) / 3 ≈ 136.67px
@@ -86,6 +90,11 @@
         "profile" => "273.33px",
         _         => "136.67px"
     };
+
+    private string MiddleHref => MobileShell.IsSigningOnlyShell ? "/verify-nep" : "";
+
+    private NavLinkMatch MiddleMatch =>
+        MobileShell.IsSigningOnlyShell ? NavLinkMatch.Prefix : NavLinkMatch.All;
 
     public void Dispose()
     {

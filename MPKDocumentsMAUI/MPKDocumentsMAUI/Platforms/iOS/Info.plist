@@ -30,6 +30,10 @@
     <string>Assets.xcassets/appicon.appiconset</string>
     <key>NSUserNotificationsUsageDescription</key>
     <string>Уведомления о документах на подпись и статусе маршрута.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Сканирование QR-кода на свидетельстве электронной подписи (НЭП).</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Выбор фото с QR-кодом для проверки подписи.</string>
     <!-- Светлые иконки в строке состояния на тёмном фоне WebView -->
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>

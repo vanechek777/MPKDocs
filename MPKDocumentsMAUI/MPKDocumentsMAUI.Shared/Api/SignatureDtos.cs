@@ -2,6 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace MPKDocumentsMAUI.Shared.Api;
 
+/// <summary>Тело POST /signatures/verify-qr-payload (как JSON в QR).</summary>
+public sealed record VerifyQrPayloadDto(
+    [property: JsonPropertyName("mpk")] string mpk,
+    [property: JsonPropertyName("document_id")] int? document_id,
+    [property: JsonPropertyName("document_hash_hex")] string document_hash_hex
+);
+
 public sealed record VerifyEsigResponseDto(
     bool ok,
     [property: JsonPropertyName("crypto_valid")] bool crypto_valid,

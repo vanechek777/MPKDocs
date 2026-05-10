@@ -4,16 +4,24 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.core.esig import parse_esig_bytes
+from app.core.esig import build_esig_payload, esig_to_bytes, parse_esig_bytes, ParsedEsig
 from app.core.nep import document_hash_hex, load_public_key, verify_hash_hex
-from app.db.models import Document, DocumentContent, DocumentTemplate, SignatureProfile, User
+from app.db.models import DigitalSignature, Document, DocumentContent, DocumentTemplate, SignatureProfile, User
 from app.db.session import get_db
 
 router = APIRouter(prefix="/signatures", tags=["signatures"])
+
+
+class VerifyQrPayload(BaseModel):
+    """JSON из QR в свидетельстве НЭП (см. NepQrCode.BuildMobileVerificationPayload)."""
+
+    mpk: str = "nep"
+    document_id: int | None = None
+    document_hash_hex: str
 
 
 class VerifyEsigResponse(BaseModel):
@@ -33,26 +41,7 @@ class VerifyEsigResponse(BaseModel):
     detail: str | None = None
 
 
-@router.post("/verify-esig", response_model=VerifyEsigResponse)
-async def verify_esig_file(
-    file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    _ = user
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пустой файл")
-    try:
-        parsed = parse_esig_bytes(raw)
-    except ValueError as e:
-        return VerifyEsigResponse(
-            ok=False,
-            crypto_valid=False,
-            matches_current_document=False,
-            detail=str(e),
-        )
-
+async def verify_parsed_esig(db: AsyncSession, parsed: ParsedEsig) -> VerifyEsigResponse:
     doc = (await db.execute(select(Document).where(Document.id == parsed.document_id))).scalar_one_or_none()
     if doc is None:
         return VerifyEsigResponse(
@@ -146,3 +135,152 @@ async def verify_esig_file(
         current_document_hash_hex=current_hash,
         detail=detail_msg,
     )
+
+
+async def _find_digital_signature_for_qr(
+    db: AsyncSession,
+    *,
+    document_id: int | None,
+    want_hash: str,
+) -> tuple[DigitalSignature | None, Document | None, dict]:
+    want = want_hash.strip().lower()
+    if not want:
+        return None, None, {}
+
+    if document_id is not None:
+        doc = (await db.execute(select(Document).where(Document.id == document_id))).scalar_one_or_none()
+        if doc is None:
+            return None, None, {}
+        content = (
+            await db.execute(select(DocumentContent.DataJson).where(DocumentContent.DocumentId == doc.id))
+        ).scalar_one_or_none()
+        content_dict = content if isinstance(content, dict) else {}
+        cur = document_hash_hex(
+            document_id=doc.id,
+            template_id=doc.TemplateId,
+            content=content_dict,
+        )
+        signatures = (
+            await db.scalars(select(DigitalSignature).where(DigitalSignature.DocumentId == document_id))
+        ).all()
+        for ds in signatures:
+            eff = (ds.DocumentHashHex or "").strip().lower()
+            if not eff:
+                eff = cur.lower()
+            if eff == want:
+                return ds, doc, content_dict
+        return None, doc, content_dict
+
+    q = select(DigitalSignature).where(func.lower(DigitalSignature.DocumentHashHex) == want)
+    ds = (await db.execute(q.limit(1))).scalar_one_or_none()
+    if ds is None:
+        return None, None, {}
+    doc = (await db.execute(select(Document).where(Document.id == ds.DocumentId))).scalar_one_or_none()
+    if doc is None:
+        return None, None, {}
+    content = (
+        await db.execute(select(DocumentContent.DataJson).where(DocumentContent.DocumentId == doc.id))
+    ).scalar_one_or_none()
+    content_dict = content if isinstance(content, dict) else {}
+    return ds, doc, content_dict
+
+
+@router.post("/verify-esig", response_model=VerifyEsigResponse)
+async def verify_esig_file(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = user
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пустой файл")
+    try:
+        parsed = parse_esig_bytes(raw)
+    except ValueError as e:
+        return VerifyEsigResponse(
+            ok=False,
+            crypto_valid=False,
+            matches_current_document=False,
+            detail=str(e),
+        )
+
+    return await verify_parsed_esig(db, parsed)
+
+
+@router.post("/verify-qr-payload", response_model=VerifyEsigResponse)
+async def verify_qr_payload(
+    payload: VerifyQrPayload,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = user
+    if (payload.mpk or "").strip().lower() != "nep":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный тип QR")
+
+    if payload.document_id is not None:
+        doc_exists = (
+            await db.execute(select(Document.id).where(Document.id == payload.document_id))
+        ).scalar_one_or_none()
+        if doc_exists is None:
+            return VerifyEsigResponse(
+                ok=False,
+                crypto_valid=False,
+                matches_current_document=False,
+                document_id=payload.document_id,
+                document_exists=False,
+                detail="Документ с таким id не найден в системе",
+            )
+
+    ds, doc, content_dict = await _find_digital_signature_for_qr(
+        db,
+        document_id=payload.document_id,
+        want_hash=payload.document_hash_hex,
+    )
+    if ds is None or doc is None:
+        msg = (
+            "Не удалось найти НЭП-подпись по данным QR для этого документа."
+            if payload.document_id is not None
+            else "Не удалось найти подпись по ключу. Убедитесь, что QR из свидетельства МПК, или загрузите файл .esig."
+        )
+        return VerifyEsigResponse(
+            ok=False,
+            crypto_valid=False,
+            matches_current_document=False,
+            document_id=payload.document_id,
+            document_hash_hex=payload.document_hash_hex.strip().lower() if payload.document_hash_hex else None,
+            detail=msg,
+        )
+
+    eff_h = (ds.DocumentHashHex or "").strip().lower() or document_hash_hex(
+        document_id=doc.id,
+        template_id=doc.TemplateId,
+        content=content_dict,
+    )
+    title = None
+    if isinstance(content_dict, dict):
+        fn = content_dict.get("fileName")
+        if isinstance(fn, str) and fn.strip():
+            title = fn.strip()
+    raw = esig_to_bytes(
+        build_esig_payload(
+            document_id=doc.id,
+            template_id=doc.TemplateId,
+            document_hash_hex=eff_h,
+            signer_user_id=int(ds.UserId),
+            signature_hex=ds.SignatureHex,
+            signed_at=ds.SignedAt,
+            document_title=title,
+        )
+    )
+    try:
+        parsed = parse_esig_bytes(raw)
+    except ValueError as e:
+        return VerifyEsigResponse(
+            ok=False,
+            crypto_valid=False,
+            matches_current_document=False,
+            detail=str(e),
+        )
+
+    return await verify_parsed_esig(db, parsed)

@@ -19,6 +19,7 @@ namespace MPKDocumentsMAUI
             // Add device-specific services used by the MPKDocumentsMAUI.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<IMobileShellService, MobileShellService>();
+            builder.Services.AddSingleton<IQrScanService, MauiQrScanService>();
 #if WINDOWS
             builder.Services.AddSingleton<IDocumentFilePicker, Platforms.Windows.WindowsDocumentFilePicker>();
 #else

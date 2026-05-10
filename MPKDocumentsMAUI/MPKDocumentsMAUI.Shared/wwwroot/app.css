@@ -1723,7 +1723,62 @@ a { color: var(--text-primary); text-decoration: none; }
 
 .doc-file-main .download-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.verify-nep-drop { margin-bottom: var(--spacing-lg); }
+.verify-nep-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+.verify-nep-paste-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: stretch;
+    margin-bottom: var(--spacing-md);
+}
+.verify-nep-paste-field {
+    flex: 1 1 200px;
+    min-width: 0;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+}
+.verify-nep-file-btn {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.verify-nep-file-input {
+    position: absolute !important;
+    inset: 0;
+    opacity: 0 !important;
+    cursor: pointer;
+    height: 100% !important;
+    width: 100% !important;
+    max-width: none !important;
+    font-size: 0 !important;
+}
+.verify-nep-drop {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: var(--spacing-lg);
+}
+.verify-nep-drop-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
 .verify-nep-result {
     margin-top: var(--spacing-xl);
     padding: var(--spacing-lg);
@@ -2514,16 +2569,53 @@ html.mpk-theme-light .mpk-file-drop--over {
    Мобильный режим (телефон / планшет MAUI): только подпись + проверка НЭП
    ============================================================================= */
 .app-shell--mobile-signing {
-    --navbar-height: 58px;
-    --navbar-bottom-offset: 0px;
-    --mpk-mobile-nav-h: 58px;
+    --navbar-height: 77px;
+    --navbar-bottom-offset: 20px;
+    /* Pill 77px + bottom offset ~20px + safe area — запас под плавающий Liquid Glass */
+    --mpk-mobile-nav-h: calc(97px + env(safe-area-inset-bottom, 0px));
 }
 
 .app-shell--mobile-signing .page-content {
     padding-left: 12px;
     padding-right: 12px;
     padding-top: calc(env(safe-area-inset-top, 0px) + var(--spacing-lg));
-    padding-bottom: calc(var(--mpk-mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
+    padding-bottom: calc(var(--mpk-mobile-nav-h) + 12px);
+}
+
+.app-shell--mobile-signing .document-list {
+    gap: 10px;
+}
+
+.app-shell--mobile-signing .document-card {
+    border: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    background: linear-gradient(152deg, rgba(48, 32, 32, 0.42) 0%, rgba(18, 18, 22, 0.88) 52%, rgba(12, 12, 14, 0.95) 100%);
+    backdrop-filter: blur(14px) saturate(1.25);
+    -webkit-backdrop-filter: blur(14px) saturate(1.25);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.app-shell--mobile-signing .detail-info-block,
+.app-shell--mobile-signing .doc-file-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: rgba(30, 22, 22, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.app-shell--mobile-signing .detail-field-label {
+    color: var(--text-tertiary);
+}
+
+.app-shell--mobile-signing .detail-field-value {
+    font-weight: 600;
+}
+
+.app-shell--mobile-signing .sig-node-card {
+    border-radius: 14px;
 }
 
 .app-shell--mobile-signing .page-title {
@@ -2572,7 +2664,7 @@ html.mpk-theme-light .mpk-file-drop--over {
 }
 
 .app-shell--mobile-signing .wizard-back {
-    bottom: calc(var(--mpk-mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
+    bottom: calc(var(--mpk-mobile-nav-h) + 12px);
 }
 
 .mpk-mobile-nav {

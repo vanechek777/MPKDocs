@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using QRCoder;
 
 namespace MPKDocumentsMAUI.Shared.Nep;
@@ -19,6 +20,43 @@ public static class NepQrCode
             sb.Append(",\"document_id\":").Append(documentId.Value);
         sb.Append('}');
         return sb.ToString();
+    }
+
+    /// <summary>Сырой текст из QR (или вставка пользователем): JSON с ключами mpk, document_hash_hex.</summary>
+    public static bool TryParseMobileVerificationPayload(string? scanned, out int? documentId, out string? documentHashHex)
+    {
+        documentId = null;
+        documentHashHex = null;
+        if (string.IsNullOrWhiteSpace(scanned))
+            return false;
+
+        var t = scanned.Trim();
+        try
+        {
+            using var doc = JsonDocument.Parse(t);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("mpk", out var mpkEl) ||
+                !string.Equals(mpkEl.GetString(), "nep", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (!root.TryGetProperty("document_hash_hex", out var hashEl))
+                return false;
+            var hash = hashEl.GetString();
+            if (string.IsNullOrWhiteSpace(hash))
+                return false;
+            documentHashHex = hash.Trim().ToLowerInvariant();
+
+            if (root.TryGetProperty("document_id", out var idEl) && idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt32(out var id) && id > 0)
+                documentId = id;
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static void JsonEscape(StringBuilder sb, string s)

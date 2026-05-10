@@ -303,5 +303,13 @@ public sealed class DocumentsApiClient
         res.EnsureSuccessStatusCode();
         return (await res.Content.ReadFromJsonAsync<VerifyEsigResponseDto>(cancellationToken: ct))!;
     }
+
+    public async Task<VerifyEsigResponseDto> VerifyNepQrPayloadAsync(VerifyQrPayloadDto payload, CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.PostAsJsonAsync(U("/signatures/verify-qr-payload"), payload, cancellationToken: ct);
+        res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<VerifyEsigResponseDto>(cancellationToken: ct))!;
+    }
 }
 

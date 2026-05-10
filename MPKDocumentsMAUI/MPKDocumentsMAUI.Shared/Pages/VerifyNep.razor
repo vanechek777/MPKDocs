@@ -2,6 +2,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject NavigationManager Navigation
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@inject MPKDocumentsMAUI.Shared.Services.IQrScanService QrScan
 @inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
 @inject Microsoft.JSInterop.IJSRuntime JS
 @using MPKDocumentsMAUI.Shared.Api
@@ -19,11 +20,30 @@
     </div>
 
     <p style="margin-bottom:var(--spacing-lg);max-width:560px">
-        Загрузите файл подписи с расширением <strong>.esig</strong>. Сервис проверит криптографическую подлинность и сопоставит документ в системе.
+        Загрузите файл подписи <strong>.esig</strong>, отсканируйте QR с электронного свидетельства или вставьте его текст. Проверка совпадает с десктопной версией.
     </p>
 
+    <div class="verify-nep-toolbar">
+        @if (MobileShell.IsSigningOnlyShell)
+        {
+            <button type="button" class="btn btn-secondary btn-sm" @onclick="ScanQrAsync" disabled="@busy">
+                Сканировать QR с ЭП
+            </button>
+        }
+        <label class="btn btn-secondary btn-sm verify-nep-file-btn">
+            Фото QR
+            <InputFile OnChange="OnQrImageSelected" accept="image/*" class="verify-nep-file-input" disabled="@busy" />
+        </label>
+    </div>
+
+    <div class="verify-nep-paste-row">
+        <input type="text" class="verify-nep-paste-field" placeholder="Вставьте текст из QR (JSON)" @bind="_qrPaste" disabled="@busy" />
+        <button type="button" class="btn btn-maroon btn-sm" @onclick="VerifyPastedQrAsync" disabled="@busy">Проверить QR</button>
+    </div>
+
     <div class="verify-nep-drop">
-        <InputFile OnChange="OnEsigSelected" accept=".esig,application/octet-stream" class="mpk-inputfile" />
+        <span class="verify-nep-drop-label">Файл .esig</span>
+        <InputFile OnChange="OnEsigSelected" accept=".esig,application/octet-stream" class="mpk-inputfile" disabled="@busy" />
     </div>
 
     @if (!string.IsNullOrWhiteSpace(busyText))
@@ -69,7 +89,7 @@
             }
             @if (lastResult.ok || lastResult.crypto_valid)
             {
-                <button type="button" class="btn btn-secondary" style="margin-top:12px" @onclick="PrintLastAsync">Печать свидетельства</button>
+                <button type="button" class="btn btn-secondary" style="margin-top:12px" @onclick="PrintLastAsync">@(MobileShell.IsSigningOnlyShell ? "Просмотр / печать" : "Печать свидетельства")</button>
             }
         </div>
     }
@@ -78,6 +98,8 @@
 @code {
     private VerifyEsigResponseDto? lastResult;
     private string? busyText;
+    private string _qrPaste = "";
+    private bool busy => !string.IsNullOrWhiteSpace(busyText);
 
     private string? VerifyQrDataUrl =>
         lastResult is null || string.IsNullOrWhiteSpace(lastResult.document_hash_hex)
@@ -87,6 +109,106 @@
 
     private void GoBack() =>
         Navigation.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/profile");
+
+    private async Task ScanQrAsync()
+    {
+        if (busy) return;
+        busyText = "Камера…";
+        lastResult = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var raw = await QrScan.ScanQrFromCameraAsync();
+            await FinishQrVerificationAsync(raw, "Не удалось прочитать QR. Попробуйте «Фото QR» или хорошо осветите код.");
+        }
+        finally
+        {
+            busyText = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnQrImageSelected(InputFileChangeEventArgs e)
+    {
+        var f = e.File;
+        if (f is null || busy) return;
+        busyText = "Чтение фото…";
+        lastResult = null;
+        await InvokeAsync(StateHasChanged);
+        string? raw = null;
+        try
+        {
+            const long max = 15 * 1024 * 1024;
+            await using var stream = f.OpenReadStream(max);
+            await using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+            raw = QrScan.DecodeQrFromImageStream(ms);
+        }
+        catch
+        {
+            raw = null;
+        }
+
+        busyText = null;
+        await InvokeAsync(StateHasChanged);
+        await FinishQrVerificationAsync(raw, "QR на фото не найден. Сделайте крупнее или используйте вставку текста из QR.");
+    }
+
+    private async Task VerifyPastedQrAsync()
+    {
+        if (busy) return;
+        await FinishQrVerificationAsync(_qrPaste.Trim(), "Вставьте текст QR (JSON вида {\"mpk\":\"nep\",...}).");
+    }
+
+    private async Task FinishQrVerificationAsync(string? raw, string invalidFormatDetail)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            lastResult = new VerifyEsigResponseDto(
+                ok: false, crypto_valid: false, matches_current_document: false,
+                document_id: null, document_exists: false, document_title: null, template_name: null,
+                signer_user_id: null, signer_name: null, signed_at_utc: null,
+                document_hash_hex: null, signature_hex: null, current_document_hash_hex: null,
+                detail: invalidFormatDetail);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (!NepQrCode.TryParseMobileVerificationPayload(raw, out var docId, out var hashHex) ||
+            string.IsNullOrWhiteSpace(hashHex))
+        {
+            lastResult = new VerifyEsigResponseDto(
+                ok: false, crypto_valid: false, matches_current_document: false,
+                document_id: null, document_exists: false, document_title: null, template_name: null,
+                signer_user_id: null, signer_name: null, signed_at_utc: null,
+                document_hash_hex: null, signature_hex: null, current_document_hash_hex: null,
+                detail: "Текст не похож на QR МПК. Ожидается JSON с mpk=nep и document_hash_hex.");
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        busyText = "Проверка…";
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            lastResult = await DocsApi.VerifyNepQrPayloadAsync(new VerifyQrPayloadDto("nep", docId, hashHex));
+        }
+        catch
+        {
+            lastResult = new VerifyEsigResponseDto(
+                ok: false, crypto_valid: false, matches_current_document: false,
+                document_id: docId, document_exists: false, document_title: null, template_name: null,
+                signer_user_id: null, signer_name: null, signed_at_utc: null,
+                document_hash_hex: hashHex, signature_hex: null, current_document_hash_hex: null,
+                detail: "Не удалось выполнить проверку по QR. Проверьте интернет или обновите сервер API.");
+        }
+        finally
+        {
+            busyText = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private async Task OnEsigSelected(InputFileChangeEventArgs e)
     {
@@ -134,7 +256,10 @@
             var html = NepCertificateHtml.BuildFromVerification(lastResult);
             var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-print.js").ToString();
             var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
-            await mod.InvokeVoidAsync("openPrintWindow", html);
+            if (MobileShell.IsSigningOnlyShell)
+                await mod.InvokeVoidAsync("openHtmlPreview", html);
+            else
+                await mod.InvokeVoidAsync("openPrintWindow", html);
             await mod.DisposeAsync();
         }
         catch

@@ -18,6 +18,7 @@ namespace MPKDocumentsMAUI
             // Add device-specific services used by the MPKDocumentsMAUI.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<IMobileShellService, MobileShellService>();
+            builder.Services.AddSingleton<IQrScanService, NullQrScanService>();
             builder.Services.AddSingleton<IDocumentFilePicker, NullDocumentFilePicker>();
             builder.Services.AddSingleton(new ApiOptions());
             builder.Services.AddSingleton<INotificationPermissionService, WebNotificationPermissionService>();

@@ -32,6 +32,8 @@ public sealed class MobileShellService : IMobileShellService
             return true;
         if (p.StartsWith("/verify-nep", StringComparison.Ordinal))
             return true;
+        if (p.StartsWith("/profile", StringComparison.Ordinal))
+            return true;
         if (p.StartsWith("/document/", StringComparison.Ordinal))
             return true;
         if (p == "/login" || p == "/register")

@@ -21,7 +21,49 @@ export async function downloadBase64(fileName, base64, mime) {
         }
     }
 
+    if (typeof navigator !== "undefined" && navigator.share && navigator.canShare) {
+        try {
+            const f = new File([blob], name, { type: mime || "application/octet-stream" });
+            if (navigator.canShare({ files: [f] })) {
+                await navigator.share({ files: [f], title: name });
+                return;
+            }
+        } catch (e) {
+            if (e && e.name === "AbortError") return;
+        }
+    }
+
+    const opened = openBlobInNewTab(blob, mime);
+    if (opened) return;
+
     downloadWithAnchor(blob, name);
+}
+
+/**
+ * iOS WebView: иногда срабатывает только открытие blob URL в новой вкладке.
+ * @param {Blob} blob
+ * @param {string} [mime]
+ * @returns {boolean}
+ */
+function openBlobInNewTab(blob, mime) {
+    try {
+        const url = URL.createObjectURL(blob);
+        const w = window.open(url, "_blank", "noopener,noreferrer");
+        if (w) {
+            setTimeout(() => {
+                try {
+                    URL.revokeObjectURL(url);
+                } catch {
+                    /* ignore */
+                }
+            }, 60000);
+            return true;
+        }
+        URL.revokeObjectURL(url);
+    } catch {
+        /* ignore */
+    }
+    return false;
 }
 
 function base64ToBlob(base64, mime) {
