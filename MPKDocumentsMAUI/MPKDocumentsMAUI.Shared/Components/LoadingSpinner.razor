@@ -1,0 +1,27 @@
+<div class="mpk-loading-indicator @(Center ? "mpk-loading-indicator--center" : null) @CssClass"
+     role="status"
+     aria-live="polite"
+     aria-label="@AriaEffective">
+    <span class="mpk-spinner mpk-spinner--@SizeToken" aria-hidden="true"></span>
+    @if (!string.IsNullOrEmpty(Caption))
+    {
+        <span class="mpk-loading-indicator__caption">@Caption</span>
+    }
+</div>
+
+@code {
+    [Parameter] public string Size { get; set; } = "md";
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public bool Center { get; set; }
+
+    private string AriaEffective => !string.IsNullOrEmpty(Caption) ? Caption! : (AriaLabel ?? "Загрузка");
+
+    private string SizeToken => Size.ToLowerInvariant() switch
+    {
+        "sm" => "sm",
+        "lg" => "lg",
+        _ => "md",
+    };
+}

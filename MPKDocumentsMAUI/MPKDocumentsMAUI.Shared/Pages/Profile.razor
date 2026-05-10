@@ -1,0 +1,396 @@
+@page "/profile"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
+@inject IJSRuntime JS
+@inject INotificationPermissionService Notifications
+@using System.Net.Http
+@using MPKDocumentsMAUI.Shared.Api
+
+<PageTitle>Профиль — МПК Документы</PageTitle>
+
+<div class="page-content">
+    @if (loadError is not null)
+    {
+        <div class="auth-error" style="margin-bottom:var(--spacing-lg)">@loadError</div>
+    }
+
+    @if (_loading)
+    {
+        <div class="profile-loading-wrap"><LoadingSpinner Center /></div>
+    }
+    else if (!editMode)
+    {
+        <h1 class="page-title">Профиль</h1>
+
+        <div class="profile-hero">
+            <div class="profile-avatar-lg">@initials</div>
+            <div class="profile-fullname">@fullName</div>
+            <div class="profile-position">@(string.IsNullOrEmpty(position) || position == "—" ? "Должность не указана" : position)</div>
+            <div class="profile-dept">@(string.IsNullOrEmpty(department) || department == "—" ? "Отдел не указан" : department)</div>
+            <button type="button" class="profile-edit-btn" @onclick="OpenEdit">Редактировать</button>
+        </div>
+
+        <div class="profile-section">
+            <div class="profile-section-title">Личная информация</div>
+            <div class="profile-info-list">
+                <div class="profile-info-item">
+                    <div class="profile-info-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                        </svg>
+                    </div>
+                    <div class="profile-info-content">
+                        <div class="profile-info-label">Телефон</div>
+                        <div class="profile-info-value">@phone</div>
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-info-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                            <polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                    </div>
+                    <div class="profile-info-content">
+                        <div class="profile-info-label">Email</div>
+                        <div class="profile-info-value">@(string.IsNullOrWhiteSpace(email) ? "—" : email)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <NavLink class="profile-nep-card" href="/verify-nep">
+            <div class="profile-nep-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="m9 12 2 2 4-4"/>
+                </svg>
+            </div>
+            <div class="profile-nep-text">
+                <div class="profile-nep-title">Проверка НЭП</div>
+                <div class="profile-nep-sub">Загрузите файл подписи (.esig) и убедитесь, что он соответствует документу.</div>
+            </div>
+            <span class="profile-nep-cta">Открыть</span>
+        </NavLink>
+
+        <div class="profile-section">
+            <div class="profile-section-title">Настройки</div>
+            <div class="profile-info-list">
+                <div class="settings-item">
+                    <span class="settings-label">Уведомления</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" @bind="notificationsEnabled" @bind:after="OnNotificationsChangedAsync" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-label">Тёмная тема</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" @bind="darkTheme" @bind:after="OnDarkThemeChangedAsync" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-label">Язык</span>
+                    <span class="settings-value">Русский</span>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-label">Меньше анимаций</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" @bind="reduceMotion" @bind:after="OnReduceMotionChangedAsync" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-label">Тактильный отклик</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" @bind="hapticsEnabled" @bind:after="OnHapticsChangedAsync" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-label">Компактные карточки в списках</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" @bind="compactLists" @bind:after="OnCompactListsChangedAsync" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-actions">
+            @if (isAdmin)
+            {
+                <NavLink class="btn btn-secondary profile-action-btn" href="/admin">Админ-панель</NavLink>
+            }
+            <button type="button" class="profile-logout-btn" @onclick="Logout">Выход</button>
+        </div>
+    }
+    else
+    {
+        <div class="profile-edit-page-wrap">
+            <div class="profile-edit-panel wizard-form">
+                <div class="detail-header profile-edit-header">
+                    <button type="button" class="detail-back" @onclick="CancelEdit" aria-label="Назад">
+                        <img src="icons/full_arrow_left.png" alt="" style="width:20px;height:20px;opacity:0.8" />
+                    </button>
+                    <h2 class="detail-title profile-edit-heading">Редактирование профиля</h2>
+                </div>
+
+                @if (saveError is not null)
+                {
+                    <div class="auth-error" style="margin-bottom:var(--spacing-lg)">@saveError</div>
+                }
+
+                <div class="form-group">
+                    <label class="form-label">ФИО</label>
+                    <input class="form-input" type="text" @bind="editName" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Телефон</label>
+                    <input class="form-input" type="tel" @bind="editPhone" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input class="form-input" type="email" @bind="editEmail" />
+                </div>
+                <div class="wizard-actions">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelEdit" disabled="@_busy">Отмена</button>
+                    <button type="button" class="btn btn-green" @onclick="SaveProfile" disabled="@_busy">
+                        @if (_busy)
+                        {
+                            <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Сохранение…</span></span>
+                        }
+                        else
+                        {
+                            <span>Сохранить</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private const string SkNotifications = "mpk_notifications";
+    private const string SkDarkTheme = "mpk_dark_theme";
+    private const string SkReducedMotion = "mpk_reduced_motion";
+    private const string SkHaptics = "mpk_haptics";
+    private const string SkCompactLists = "mpk_compact_lists";
+
+    private bool editMode;
+    private bool _loading = true;
+    private bool _busy;
+    private string? loadError;
+    private string? saveError;
+
+    private string fullName = "";
+    private string position = "—";
+    private string department = "—";
+    private string phone = "";
+    private string email = "";
+    private bool isAdmin;
+
+    private bool notificationsEnabled = true;
+    private bool darkTheme = true;
+    private bool reduceMotion;
+    private bool hapticsEnabled = true;
+    private bool compactLists;
+
+    private string editName = "";
+    private string editPhone = "";
+    private string editEmail = "";
+
+    private string initials => InitialsFromName(fullName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfileAsync();
+        await LoadLocalSettingsAsync();
+    }
+
+    private static bool ParseStoredBool(string? v, bool whenNullOrEmpty)
+    {
+        if (string.IsNullOrEmpty(v))
+            return whenNullOrEmpty;
+        return v is "1" or "true" or "True";
+    }
+
+    private async Task LoadLocalSettingsAsync()
+    {
+        try
+        {
+            var n = await JS.InvokeAsync<string?>("MPKDocuments.settingsGet", SkNotifications);
+            notificationsEnabled = ParseStoredBool(n, whenNullOrEmpty: true);
+            var d = await JS.InvokeAsync<string?>("MPKDocuments.settingsGet", SkDarkTheme);
+            darkTheme = ParseStoredBool(d, whenNullOrEmpty: true);
+            var rm = await JS.InvokeAsync<string?>("MPKDocuments.settingsGet", SkReducedMotion);
+            reduceMotion = ParseStoredBool(rm, whenNullOrEmpty: false);
+            var h = await JS.InvokeAsync<string?>("MPKDocuments.settingsGet", SkHaptics);
+            hapticsEnabled = ParseStoredBool(h, whenNullOrEmpty: true);
+            var c = await JS.InvokeAsync<string?>("MPKDocuments.settingsGet", SkCompactLists);
+            compactLists = ParseStoredBool(c, whenNullOrEmpty: false);
+            await JS.InvokeVoidAsync("MPKDocuments.applyDarkTheme", darkTheme);
+            await JS.InvokeVoidAsync("MPKDocuments.applyReducedMotionFromStored", reduceMotion ? "1" : "0");
+            await JS.InvokeVoidAsync("MPKDocuments.applyCompactListsFromStored");
+        }
+        catch
+        {
+            /* без JS */
+        }
+    }
+
+    private async Task OnNotificationsChangedAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkNotifications, notificationsEnabled ? "1" : "0");
+            if (notificationsEnabled)
+            {
+                var ok = await Notifications.TryRequestNotificationPermissionAsync();
+                if (!ok)
+                {
+                    notificationsEnabled = false;
+                    await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkNotifications, "0");
+                    StateHasChanged();
+                }
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
+    private async Task OnDarkThemeChangedAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkDarkTheme, darkTheme ? "1" : "0");
+            await JS.InvokeVoidAsync("MPKDocuments.applyDarkTheme", darkTheme);
+        }
+        catch { }
+    }
+
+    private async Task OnReduceMotionChangedAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkReducedMotion, reduceMotion ? "1" : "0");
+            await JS.InvokeVoidAsync("MPKDocuments.applyReducedMotionFromStored", reduceMotion ? "1" : "0");
+        }
+        catch { }
+    }
+
+    private async Task OnHapticsChangedAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkHaptics, hapticsEnabled ? "1" : "0");
+            if (hapticsEnabled)
+                await JS.InvokeVoidAsync("MPKDocuments.tryHapticPulse");
+        }
+        catch { }
+    }
+
+    private async Task OnCompactListsChangedAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkCompactLists, compactLists ? "1" : "0");
+            await JS.InvokeVoidAsync("MPKDocuments.applyCompactListsFromStored");
+        }
+        catch { }
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        loadError = null;
+        _loading = true;
+        try
+        {
+            var me = await Auth.GetMeAsync();
+            ApplyMe(me);
+        }
+        catch
+        {
+            loadError = "Не удалось загрузить профиль. Проверьте соединение и войдите снова.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyMe(MeResponse me)
+    {
+        fullName = me.full_name;
+        phone = me.phone_number;
+        email = me.email ?? "";
+        position = string.IsNullOrWhiteSpace(me.position) ? "—" : me.position;
+        department = string.IsNullOrWhiteSpace(me.department) ? "—" : me.department;
+        isAdmin = me.is_admin;
+    }
+
+    private static string InitialsFromName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2 && parts[0].Length > 0 && parts[1].Length > 0)
+            return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}";
+        return name.Trim().Length >= 2
+            ? $"{char.ToUpperInvariant(name.Trim()[0])}{char.ToUpperInvariant(name.Trim()[1])}"
+            : name.Trim().ToUpperInvariant();
+    }
+
+    private void OpenEdit()
+    {
+        saveError = null;
+        editName = fullName;
+        editPhone = phone;
+        editEmail = email;
+        editMode = true;
+    }
+
+    private void CancelEdit()
+    {
+        saveError = null;
+        editMode = false;
+    }
+
+    private async Task SaveProfile()
+    {
+        saveError = null;
+        _busy = true;
+        try
+        {
+            var patch = new MePatchRequest(
+                full_name: editName.Trim(),
+                phone_number: editPhone.Trim(),
+                email: editEmail?.Trim() ?? "");
+            var me = await Auth.PatchProfileAsync(patch);
+            ApplyMe(me);
+            editMode = false;
+        }
+        catch (HttpRequestException ex)
+        {
+            saveError = ex.Message;
+        }
+        catch
+        {
+            saveError = "Не удалось сохранить профиль.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Logout()
+    {
+        await Auth.LogoutAsync();
+        Navigation.NavigateTo("/login", replace: true);
+    }
+}

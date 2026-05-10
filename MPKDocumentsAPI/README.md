@@ -1,0 +1,68 @@
+cd C:\Users\vania\source\repos\MPKDocumentsMAUI\MPKDocumentsAPI
+Remove-Item -Recurse -Force .venvpy -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\python -m pip uninstall -y jose
+.\.venv\Scripts\python -m pip install -r requirements.txt## MPKDocumentsAPI (FastAPI)
+
+### Setup
+
+Create `.env` (see `.env.example`) and install deps:
+
+```bash
+python -m venv .venv
+.venv\\Scripts\\pip install -r requirements.txt
+```
+
+If you previously installed the unrelated `jose` package, remove it:
+
+```bash
+.venv\\Scripts\\python -m pip uninstall -y jose
+```
+
+### Run
+
+```bash
+.venv\\Scripts\\python -m uvicorn main:app --reload
+```
+
+### Seed test data
+
+Creates departments/positions/users/templates/documents/tasks so the UI has data.
+
+```bash
+.venv\\Scripts\\python seed.py
+```
+
+Test user:
+
+- phone: `+79148012594`
+- password: `password`
+
+### SMS и OTP
+
+**Россия (+7)** — используйте **только российские шлюзы** из этого API (они же реально доставляют в сети РФ):
+
+| Провайдер | `SMS_PROVIDER` | Ключи в `.env` |
+| --- | --- | --- |
+| **[SMSC.ru](https://smsc.ru/api/)** | `smsc` | `SMSC_API_KEY` или `SMSC_LOGIN` + `SMSC_PASSWORD` |
+| **[SMS.RU](https://sms.ru/)** | `smsru` | `SMSRU_API_ID` (см. личный кабинет); опционально `SMSRU_FROM` |
+
+Текст кода: `SMSC_OTP_MESSAGE_TEMPLATE=Code: {code}` (общий шаблон для всех провайдеров). Для SMSC при ошибке «сообщение запрещено» уберите `SMSC_SENDER` или согласуйте имя в кабинете.
+
+**Без SMS (разработка):** `OTP_DEV_MODE=true` — код в логе uvicorn; опционально `OTP_DEV_RETURN_CODE=true` — поле `dev_code`.
+
+**Не РФ / тест за рубежом:** `SMS_PROVIDER=twilio` или `vonage` — см. `.env.example` (на **+7 обычно не подходят**).
+
+Услуга SMS всегда платная у операторов; «бесплатно навсегда на любой номер» не бывает. Если `OTP_DEV_MODE=true`, внешний шлюз не вызывается.
+
+- `POST /auth/otp/send` (Bearer JWT) — выдаёт 6-значный код (SMS или dev-режим). Клиент MAUI вызывает этот метод при нажатии «Подписать» / перед вводом кода.
+- `POST /documents/{id}/actions/sign` с полем `otp_code` — код проверяется; при успехе сохраняется NEP-подпись документа.
+
+### Endpoints
+
+- `GET /health`
+- `POST /auth/login` (phone_number + password) → JWT
+- `POST /auth/otp/send` (Bearer) → SMS (`SMS_PROVIDER`: для РФ **smsc** или **smsru**)
+- `GET /users/me` (Bearer)
+- `GET /documents/recent` (Bearer)
+

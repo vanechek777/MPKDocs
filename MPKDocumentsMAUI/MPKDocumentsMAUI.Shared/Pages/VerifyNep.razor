@@ -1,0 +1,145 @@
+@page "/verify-nep"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using MPKDocumentsMAUI.Shared.Api
+@using MPKDocumentsMAUI.Shared.Nep
+@using System
+
+<PageTitle>Проверка НЭП — МПК Документы</PageTitle>
+
+<div class="page-content">
+    <div class="detail-header">
+        <button type="button" class="detail-back" @onclick="GoBack">
+            <img src="icons/full_arrow_left.png" alt="" style="width:20px;height:20px;filter:brightness(0) invert(1)" />
+        </button>
+        <h1 class="detail-title">Проверка НЭП</h1>
+    </div>
+
+    <p style="margin-bottom:var(--spacing-lg);max-width:560px">
+        Загрузите файл подписи с расширением <strong>.esig</strong>. Сервис проверит криптографическую подлинность и сопоставит документ в системе.
+    </p>
+
+    <div class="verify-nep-drop">
+        <InputFile OnChange="OnEsigSelected" accept=".esig,application/octet-stream" class="mpk-inputfile" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(busyText))
+    {
+        <div class="verify-nep-busy"><LoadingSpinner Size="sm" Caption="@busyText" /></div>
+    }
+
+    @if (lastResult is not null)
+    {
+        <div class="verify-nep-result @(lastResult.ok ? "ok" : "bad")">
+            <div class="verify-nep-result__title">@(lastResult.ok ? "Подпись действительна" : "Результат проверки")</div>
+            <table class="verify-nep-table">
+                <tr><th>Документ</th><td>@(lastResult.document_title ?? "—")</td></tr>
+                <tr><th>ID в системе</th><td>@(lastResult.document_id?.ToString() ?? "—")</td></tr>
+                <tr><th>Тип документа</th><td>@(lastResult.template_name ?? "—")</td></tr>
+                <tr><th>Подписант</th><td>@(lastResult.signer_name ?? "—")</td></tr>
+                <tr><th>Дата и время подписи</th><td>@NepCertificateHtml.FormatSignedAtLocalDisplay(lastResult.signed_at_utc)</td></tr>
+                @if (!string.IsNullOrWhiteSpace(lastResult.document_hash_hex))
+                {
+                    <tr><th>Ключ подписи</th><td class="verify-nep-mono">@lastResult.document_hash_hex</td></tr>
+                }
+                @if (!string.IsNullOrWhiteSpace(lastResult.current_document_hash_hex)
+                     && !string.Equals(lastResult.document_hash_hex, lastResult.current_document_hash_hex, StringComparison.OrdinalIgnoreCase))
+                {
+                    <tr><th>Текущий хеш в системе</th><td class="verify-nep-mono">@lastResult.current_document_hash_hex</td></tr>
+                }
+                @if (!string.IsNullOrWhiteSpace(lastResult.signature_hex))
+                {
+                    <tr><th>Код подписи</th><td class="verify-nep-mono">@lastResult.signature_hex</td></tr>
+                }
+                <tr><th>Криптопроверка</th><td>@(lastResult.crypto_valid ? "Да" : "Нет")</td></tr>
+                <tr><th>Совпадение с текущим документом</th><td>@(lastResult.matches_current_document ? "Да" : "Нет")</td></tr>
+            </table>
+            @if (!string.IsNullOrWhiteSpace(VerifyQrDataUrl))
+            {
+                <div class="verify-nep-qr">
+                    <img src="@VerifyQrDataUrl" width="200" height="200" alt="" />
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(lastResult.detail))
+            {
+                <p class="verify-nep-detail">@lastResult.detail</p>
+            }
+            @if (lastResult.ok || lastResult.crypto_valid)
+            {
+                <button type="button" class="btn btn-secondary" style="margin-top:12px" @onclick="PrintLastAsync">Печать свидетельства</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private VerifyEsigResponseDto? lastResult;
+    private string? busyText;
+
+    private string? VerifyQrDataUrl =>
+        lastResult is null || string.IsNullOrWhiteSpace(lastResult.document_hash_hex)
+            ? null
+            : NepQrCode.ToPngDataUrl(
+                NepQrCode.BuildMobileVerificationPayload(lastResult.document_id, lastResult.document_hash_hex));
+
+    private void GoBack() =>
+        Navigation.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/profile");
+
+    private async Task OnEsigSelected(InputFileChangeEventArgs e)
+    {
+        var f = e.File;
+        if (f is null) return;
+        busyText = "Проверка…";
+        lastResult = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            const long max = 2 * 1024 * 1024;
+            await using var stream = f.OpenReadStream(max);
+            lastResult = await DocsApi.VerifyEsigAsync(stream);
+        }
+        catch
+        {
+            lastResult = new VerifyEsigResponseDto(
+                ok: false,
+                crypto_valid: false,
+                matches_current_document: false,
+                document_id: null,
+                document_exists: false,
+                document_title: null,
+                template_name: null,
+                signer_user_id: null,
+                signer_name: null,
+                signed_at_utc: null,
+                document_hash_hex: null,
+                signature_hex: null,
+                current_document_hash_hex: null,
+                detail: "Не удалось выполнить проверку. Проверьте соединение с API и формат файла.");
+        }
+        finally
+        {
+            busyText = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task PrintLastAsync()
+    {
+        if (lastResult is null) return;
+        try
+        {
+            var html = NepCertificateHtml.BuildFromVerification(lastResult);
+            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-print.js").ToString();
+            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
+            await mod.InvokeVoidAsync("openPrintWindow", html);
+            await mod.DisposeAsync();
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+}

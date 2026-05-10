@@ -1,0 +1,98 @@
+@page "/login"
+@layout MPKDocumentsMAUI.Shared.Layout.AuthLayout
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Nav
+@inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
+@inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div>
+                <h2 class="auth-title">Вход</h2>
+                <div class="auth-subtitle">МПК Документы</div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="auth-error">@_error</div>
+        }
+
+        <div class="form-group">
+            <label class="form-label">Телефон</label>
+            <InputText class="form-input" @bind-Value="_model.PhoneNumber" placeholder="+79148012594" />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Пароль</label>
+            <InputText class="form-input" @bind-Value="_model.Password" type="password" />
+        </div>
+
+        <div class="auth-actions">
+            <button class="btn btn-green" disabled="@_busy" type="button" @onclick="OnLoginClick">
+                @if (_busy)
+                {
+                    <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Входим…</span></span>
+                }
+                else
+                {
+                    <span>Войти</span>
+                }
+            </button>
+            <button class="btn btn-outline" type="button" @onclick="GoRegister">
+                Регистрация
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private LoginModel _model = new();
+
+    private async Task OnLoginClick()
+    {
+        if (_busy) return;
+
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_model.PhoneNumber) || string.IsNullOrWhiteSpace(_model.Password))
+        {
+            _error = "Заполни телефон и пароль.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await Auth.LoginAsync(_model.PhoneNumber, _model.Password);
+            Nav.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Не удалось войти. Проверь телефон/пароль и что API запущено."
+                : $"Не удалось войти: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void GoRegister() => Nav.NavigateTo("/register");
+
+    private sealed class LoginModel
+    {
+        [Required]
+        public string PhoneNumber { get; set; } = "";
+
+        [Required]
+        public string Password { get; set; } = "";
+    }
+}
+

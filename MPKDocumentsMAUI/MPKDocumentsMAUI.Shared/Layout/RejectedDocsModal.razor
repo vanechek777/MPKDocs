@@ -1,0 +1,70 @@
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="Close">
+        <div class="modal-card" @onclick:stopPropagation>
+            <div class="modal-header">Отклонённые мной</div>
+
+            <div class="modal-body">
+                @if (Documents == null || Documents.Count == 0)
+                {
+                    <div style="text-align:center;color:var(--text-secondary);padding:var(--spacing-xl) 0">
+                        Отклонённых вами документов нет
+                    </div>
+                }
+                else
+                {
+                    <div class="document-list" style="padding:0">
+                        @foreach (var doc in Documents)
+                        {
+                            <div class="document-card" style="cursor:pointer" @onclick="() => OnOpenDocument.InvokeAsync(doc.Id)">
+                                <div class="doc-icon">
+                                    <img src="icons/document.png" alt="PDF" />
+                                </div>
+                                <span class="doc-side-dot unread-dot"></span>
+                                <div class="doc-info">
+                                    <div class="doc-name">@doc.FileName</div>
+                                    <div class="doc-meta">
+                                        <span>Получен: @doc.ReceivedDate</span>
+                                        <span class="author">
+                                            <img src="icons/receive_arrow.png" alt="" class="author-ico author-ico--receive" width="9" height="9" />
+                                            @doc.Author
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="doc-status">
+                                    <span class="status-badge rejected">Отклонён мной</span>
+                                    <svg class="doc-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="9 18 15 12 9 6"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="Close">Закрыть</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public List<RejectedDocItem> Documents { get; set; } = new();
+    [Parameter] public EventCallback<string> OnOpenDocument { get; set; }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+
+    public class RejectedDocItem
+    {
+        public string Id { get; set; } = "";
+        public string FileName { get; set; } = "";
+        public string ReceivedDate { get; set; } = "";
+        public string Author { get; set; } = "";
+        public DateTime ReceivedAt { get; set; }
+    }
+}
+

@@ -1,0 +1,4 @@
+Сборка .ipa для приложения MPKDocumentsMAUI настроена в корне репозитория:
+  .github/workflows/ios.yml
+
+Старый ios.yml из этого каталога ссылался на проект FinanceManager и не подходит к MPKDocumentsMAUI.

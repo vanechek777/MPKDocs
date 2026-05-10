@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37203.1 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MPKDocumentsMAUI", "MPKDocumentsMAUI\MPKDocumentsMAUI\MPKDocumentsMAUI.csproj", "{A118971B-089E-4DFB-9207-5D26E3562480}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MPKDocumentsMAUI.Shared", "MPKDocumentsMAUI\MPKDocumentsMAUI.Shared\MPKDocumentsMAUI.Shared.csproj", "{1ADB085A-3805-49A5-95DE-91BC130D9190}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MPKDocumentsMAUI.Web", "MPKDocumentsMAUI\MPKDocumentsMAUI.Web\MPKDocumentsMAUI.Web.csproj", "{A7A9BD4A-E05C-4811-AE95-C423E5E9E7CA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A118971B-089E-4DFB-9207-5D26E3562480}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A118971B-089E-4DFB-9207-5D26E3562480}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A118971B-089E-4DFB-9207-5D26E3562480}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A118971B-089E-4DFB-9207-5D26E3562480}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1ADB085A-3805-49A5-95DE-91BC130D9190}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1ADB085A-3805-49A5-95DE-91BC130D9190}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1ADB085A-3805-49A5-95DE-91BC130D9190}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1ADB085A-3805-49A5-95DE-91BC130D9190}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7A9BD4A-E05C-4811-AE95-C423E5E9E7CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7A9BD4A-E05C-4811-AE95-C423E5E9E7CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7A9BD4A-E05C-4811-AE95-C423E5E9E7CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7A9BD4A-E05C-4811-AE95-C423E5E9E7CA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9ACEB690-DE1F-41F4-A45C-2432719D008A}
+	EndGlobalSection
+EndGlobal

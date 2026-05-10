@@ -1,0 +1,256 @@
+@page "/drafts"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+@inject IJSRuntime JS
+@using System.Globalization
+@using Microsoft.JSInterop
+@using MPKDocumentsMAUI.Shared.Api
+
+<PageTitle>Черновики — МПК Документы</PageTitle>
+
+<div class="page-content">
+    <h1 class="page-title">Черновики</h1>
+
+    @if (isLoading)
+    {
+        <div class="mpk-page-loading"><LoadingSpinner Center /></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <div style="color:var(--text-secondary);padding:12px 0">@loadError</div>
+    }
+    else if (items.Count == 0)
+    {
+        <p style="color:var(--text-secondary);padding:24px 0">Черновиков пока нет. Они появятся, если сохранить документ при выходе из мастера создания.</p>
+    }
+    else
+    {
+        <div id="drafts-document-list" class="document-list">
+            @foreach (var d in items)
+            {
+                var date = (d.created_at ?? DateTime.Now).ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+                <div class="document-card animate-in"
+                     data-draft-id="@d.id"
+                     data-draft-title="@d.title"
+                     @onclick="() => OpenDraft(d.id)">
+                    <div class="doc-icon">
+                        <img src="icons/document.png" alt="" />
+                    </div>
+                    <div class="doc-info">
+                        <div class="doc-name-row">
+                            <div class="doc-name">@d.title</div>
+                        </div>
+                        <div class="doc-meta">
+                            <span>Создан: @date</span>
+                            <span class="author">@d.initiator_name</span>
+                        </div>
+                    </div>
+                    <div class="doc-status">
+                        <span class="status-badge draft">Черновик</span>
+                        <svg class="doc-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (contextMenuDraftId is int ctxId)
+{
+    <button type="button" class="drafts-ctx-backdrop" aria-label="Закрыть меню" @onclick="CloseContextMenu"></button>
+    <div class="drafts-context-menu" role="menu" style="@($"left:{menuLeftPx}px;top:{menuTopPx}px;")" @onclick:stopPropagation="true">
+        <button type="button"
+                class="drafts-context-menu__item drafts-context-menu__item--danger"
+                role="menuitem"
+                @onclick="() => BeginDeleteFromMenu(ctxId)">
+            Удалить черновик
+        </button>
+    </div>
+}
+
+@if (showDeleteConfirm && pendingDeleteDraftId is int delId)
+{
+    <div class="modal-overlay" @onclick="CancelDeleteDraft">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <div class="modal-header">Удалить черновик?</div>
+            <div class="modal-body">
+                <p class="modal-hint" style="padding-top:0">@pendingDeleteTitle</p>
+                <p class="modal-hint">Действие необратимо: документ и вложение будут удалены с сервера.</p>
+                @if (!string.IsNullOrWhiteSpace(deleteError))
+                {
+                    <p style="color:#c44;text-align:center;font-size:var(--font-size-sm);margin-top:12px">@deleteError</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" disabled="@deleteBusy" @onclick="CancelDeleteDraft">Отмена</button>
+                <button type="button" class="btn btn-red" disabled="@deleteBusy" @onclick="() => ConfirmDeleteDraftAsync(delId)">Удалить</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string DraftsListDomId = "drafts-document-list";
+
+    private bool isLoading = true;
+    private string? loadError;
+    private List<DocumentListItemDto> items = new();
+
+    private int? contextMenuDraftId;
+    private double menuLeftPx;
+    private double menuTopPx;
+
+    private bool showDeleteConfirm;
+    private int? pendingDeleteDraftId;
+    private string pendingDeleteTitle = "";
+    private bool deleteBusy;
+    private string? deleteError;
+
+    private bool _listCtxWired;
+    private DotNetObjectReference<Drafts>? _dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (string.IsNullOrWhiteSpace(loadError) && !isLoading && items.Count > 0)
+        {
+            if (!_listCtxWired)
+            {
+                _dotNetRef ??= DotNetObjectReference.Create(this);
+                try
+                {
+                    await JS.InvokeVoidAsync("MPKDocuments.wireDraftsContextMenu", DraftsListDomId, _dotNetRef);
+                    _listCtxWired = true;
+                }
+                catch
+                {
+                    /* WebView без JS — остаётся без меню */
+                }
+            }
+        }
+        else if (_listCtxWired)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("MPKDocuments.unwireDraftsContextMenu");
+            }
+            catch
+            {
+                /* ignore */
+            }
+
+            _listCtxWired = false;
+        }
+    }
+
+    [JSInvokable]
+    public Task OpenDraftContextMenuFromJs(double clientX, double clientY, int draftId, string title)
+    {
+        return InvokeAsync(() =>
+        {
+            contextMenuDraftId = draftId;
+            menuLeftPx = clientX;
+            menuTopPx = clientY;
+            deleteError = null;
+            // InvokeAsync не перерисовывает компонент; без StateHasChanged меню появляло только после следующего клика (например левого).
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_listCtxWired)
+                await JS.InvokeVoidAsync("MPKDocuments.unwireDraftsContextMenu");
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        _listCtxWired = false;
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            items = await DocsApi.GetMyDraftsAsync(100);
+        }
+        catch
+        {
+            loadError = "Не удалось загрузить черновики. Проверь, что API запущено.";
+            items = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenDraft(int id)
+    {
+        if (contextMenuDraftId is not null)
+            return;
+        Navigation.NavigateTo($"/create-document?draft={id}");
+    }
+
+    private void CloseContextMenu()
+    {
+        contextMenuDraftId = null;
+    }
+
+    private void BeginDeleteFromMenu(int draftId)
+    {
+        var row = items.FirstOrDefault(x => x.id == draftId);
+        pendingDeleteTitle = row?.title?.Trim() is { Length: > 0 } t ? t : $"Черновик #{draftId}";
+        pendingDeleteDraftId = draftId;
+        showDeleteConfirm = true;
+        deleteError = null;
+        CloseContextMenu();
+    }
+
+    private void CancelDeleteDraft()
+    {
+        if (deleteBusy) return;
+        showDeleteConfirm = false;
+        pendingDeleteDraftId = null;
+        pendingDeleteTitle = "";
+        deleteError = null;
+    }
+
+    private async Task ConfirmDeleteDraftAsync(int draftId)
+    {
+        deleteBusy = true;
+        deleteError = null;
+        try
+        {
+            await DocsApi.DeleteDraftAsync(draftId);
+            items.RemoveAll(x => x.id == draftId);
+            showDeleteConfirm = false;
+            pendingDeleteDraftId = null;
+            pendingDeleteTitle = "";
+        }
+        catch
+        {
+            deleteError = "Не удалось удалить черновик.";
+        }
+        finally
+        {
+            deleteBusy = false;
+        }
+    }
+}

@@ -1,0 +1,66 @@
+# Visual Studio / MSBuild
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.cache
+*.pidb
+*.svclog
+*.vsp
+*.psess
+*.vspx
+*.sap
+
+# Build
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+**/bin/
+**/obj/
+*.dll
+*.exe
+*.pdb
+*.nupkg
+*.snupkg
+**/Generated Files/
+
+# MAUI / Xamarin
+**/net-*-*/
+*.ipa
+*.app/
+*.dSYM/
+
+# NuGet
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Python (MPKDocumentsAPI)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# JetBrains
+.idea/
+*.sln.iml
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Local / secrets
+*.env
+!.env.example
+appsettings.Development.local.json

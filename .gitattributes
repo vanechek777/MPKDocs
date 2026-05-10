@@ -1,0 +1,2 @@
+# Стабильные переводы строк для CI (GitHub Actions)
+.github/workflows/*.yml text eol=lf

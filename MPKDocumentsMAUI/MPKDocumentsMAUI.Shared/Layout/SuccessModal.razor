@@ -1,0 +1,53 @@
+@* Модальное окно "Успешно!" *@
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="Close">
+        <div class="modal-card" @onclick:stopPropagation style="padding:var(--spacing-3xl) var(--spacing-xl)">
+            <div class="success-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+            </div>
+            <div class="success-title">Успешно!</div>
+            <div class="success-desc">Документ @DocumentName успешно подписан!</div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string DocumentName { get; set; } = "";
+
+    private System.Timers.Timer? _timer;
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible && _timer == null)
+        {
+            _timer = new System.Timers.Timer(2500);
+            _timer.Elapsed += async (s, e) =>
+            {
+                _timer?.Stop();
+                _timer?.Dispose();
+                _timer = null;
+                await InvokeAsync(async () =>
+                {
+                    await OnClose.InvokeAsync();
+                    StateHasChanged();
+                });
+            };
+            _timer.AutoReset = false;
+            _timer.Start();
+        }
+        else if (!IsVisible)
+        {
+            _timer?.Stop();
+            _timer?.Dispose();
+            _timer = null;
+        }
+    }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+}

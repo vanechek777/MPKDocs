@@ -1,0 +1,60 @@
+@page "/admin"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
+@inject MPKDocumentsMAUI.Shared.Api.ApiOptions ApiOptions
+
+<PageTitle>Админ-панель — МПК Документы</PageTitle>
+
+<div class="page-content">
+    <h1 class="page-title">Админ-панель</h1>
+
+    @if (_loading)
+    {
+        <div class="mpk-page-loading"><LoadingSpinner Center /></div>
+    }
+    else if (!_isAdmin)
+    {
+        <div class="profile-section">
+            <p style="color:var(--text-secondary);margin-bottom:var(--spacing-lg)">У этой учётной записи нет прав администратора.</p>
+            <p style="color:var(--text-tertiary);font-size:var(--font-size-sm)">Список администраторов задаётся на сервере переменной окружения <code style="color:var(--text-secondary)">MPK_ADMIN_USER_IDS</code> (id пользователей через запятую).</p>
+            <button type="button" class="btn btn-secondary" style="margin-top:var(--spacing-xl)" @onclick="GoProfile">К профилю</button>
+        </div>
+    }
+    else
+    {
+        <div class="admin-panel-intro profile-section">
+            <p style="color:var(--text-secondary);margin-bottom:var(--spacing-md)">Раздел для администрирования системы. Здесь можно расширять управление пользователями, шаблонами и журналами.</p>
+            <ul class="admin-panel-links">
+                <li><a class="settings-link" href="@_apiDocsUrl" target="_blank" rel="noopener noreferrer">OpenAPI (Swagger)</a> — описание REST API</li>
+                <li><span style="color:var(--text-tertiary)">База и бэкенд — в репозитории MPKDocumentsAPI</span></li>
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _isAdmin;
+    private string _apiDocsUrl = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _apiDocsUrl = ApiOptions.BaseUrl.TrimEnd('/') + "/docs";
+        try
+        {
+            var me = await Auth.GetMeAsync();
+            _isAdmin = me.is_admin;
+        }
+        catch
+        {
+            _isAdmin = false;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void GoProfile() => Navigation.NavigateTo("/profile");
+}

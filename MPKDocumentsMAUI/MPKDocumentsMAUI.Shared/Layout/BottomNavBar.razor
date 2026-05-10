@@ -1,0 +1,94 @@
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<!-- SVG Liquid Glass фильтры — ВНЕ pill, глобально в DOM -->
+<svg id="lg-svg-defs" width="0" height="0"
+     style="position:fixed;left:-9999px;top:-9999px;pointer-events:none;overflow:hidden">
+    <defs>
+        <filter id="lg-nav-filter"
+                color-interpolation-filters="sRGB"
+                filterUnits="userSpaceOnUse"
+                primitiveUnits="userSpaceOnUse">
+            <feImage id="lg-nav-feimage" result="map" />
+            <feDisplacementMap id="lg-nav-fedisplace"
+                               in="SourceGraphic" in2="map"
+                               xChannelSelector="R" yChannelSelector="G"
+                               scale="0" />
+        </filter>
+        <filter id="lg-fab-filter"
+                color-interpolation-filters="sRGB"
+                filterUnits="userSpaceOnUse"
+                primitiveUnits="userSpaceOnUse">
+            <feImage id="lg-fab-feimage" result="map" />
+            <feDisplacementMap id="lg-fab-fedisplace"
+                               in="SourceGraphic" in2="map"
+                               xChannelSelector="R" yChannelSelector="G"
+                               scale="0" />
+        </filter>
+    </defs>
+</svg>
+
+<nav class="lg-navbar">
+    <div class="lg-navbar-pill">
+        <div class="lg-pill-clip">
+            <!-- Слой 1: Фон с эффектом Liquid Glass (преломление) -->
+            <div class="lg-pill-bg" style="filter: url(#lg-nav-filter)"></div>
+
+            <!-- Слой 2: Скользящий стеклянный индикатор -->
+            <div class="lg-indicator" style="transform: translateX(@GetIndicatorOffset())"></div>
+
+            <!-- Слой 3: Иконки -->
+            <div class="lg-nav-items">
+                <NavLink class="lg-nav-item" href="signing" Match="NavLinkMatch.Prefix">
+                    <img src="icons/signing.png" alt="" class="lg-icon" />
+                </NavLink>
+
+                <NavLink class="lg-nav-item" href="" Match="NavLinkMatch.All">
+                    <img src="icons/document.png" alt="" class="lg-icon" />
+                </NavLink>
+
+                <NavLink class="lg-nav-item" href="profile" Match="NavLinkMatch.Prefix">
+                    <img src="icons/profile.png" alt="" class="lg-icon" />
+                </NavLink>
+            </div>
+        </div>
+    </div>
+</nav>
+
+@code {
+    private string _activeTab = "home";
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        UpdateActiveTab(Navigation.Uri);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateActiveTab(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateActiveTab(string uri)
+    {
+        if (uri.Contains("signing") || uri.Contains("document") || uri.Contains("create-document"))
+            _activeTab = "signing";
+        else if (uri.Contains("profile")) _activeTab = "profile";
+        else                               _activeTab = "home";
+    }
+
+    // Шаг = слот = (418 - 8) / 3 ≈ 136.67px
+    private string GetIndicatorOffset() => _activeTab switch
+    {
+        "signing" => "0px",
+        "profile" => "273.33px",
+        _         => "136.67px"
+    };
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

@@ -1,0 +1,108 @@
+@* Модальное окно "Информация о документе" *@
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="Close">
+        <div class="modal-card" @onclick:stopPropagation>
+            <div class="modal-header">Информация о документе</div>
+
+            <div class="modal-body">
+                @* File row *@
+                <div class="doc-info-row">
+                    <div class="doc-file-icon">
+                        <img src="icons/document.png" alt="PDF" />
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div class="doc-file-name">@FileName</div>
+                        <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">PDF, 1.2 МБ</div>
+                    </div>
+                    <button class="btn btn-outline btn-sm" style="margin-left:auto;flex-shrink:0" title="Скачать">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </button>
+                </div>
+
+                @* Detail fields *@
+                <div class="doc-detail-field">
+                    <div class="field-label">Вид документа:</div>
+                    <div class="field-value">@DocumentType</div>
+                </div>
+                <div class="doc-detail-field">
+                    <div class="field-label">Отправитель:</div>
+                    <div class="field-value">@Sender</div>
+                </div>
+                <div class="doc-detail-field">
+                    <div class="field-label">Дата получения:</div>
+                    <div class="field-value">@ReceivedDate</div>
+                </div>
+                <div class="doc-detail-field">
+                    <div class="field-label">Статус:</div>
+                    <div class="field-value">
+                        <span class="status-dot @StatusDotClass"></span>@StatusText
+                    </div>
+                </div>
+
+                @* Signatures flow *@
+                <div class="signatures-flow-title">Этапы документа:</div>
+                <div class="signatures-flow">
+                    @foreach (var (signer, index) in Signers.Select((s, i) => (s, i)))
+                    {
+                        @if (index > 0)
+                        {
+                            <div class="sig-connector"></div>
+                        }
+                        <div class="sig-node">
+                            <div class="sig-node-dept">@signer.Department</div>
+                            <div class="sig-node-card @(signer.IsSigned ? "signed-node" : "pending-node")">
+                                <div class="sig-node-name">@signer.Name</div>
+                                <div class="sig-node-status">@signer.Status</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-red" @onclick="OnReject">Отклонить и закрыть</button>
+                <button class="btn btn-green" @onclick="OnSign">Подписать</button>
+            </div>
+
+            <div class="modal-hint">Нажмите в любом месте, чтобы закрыть окно</div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSignClick { get; set; }
+    [Parameter] public EventCallback OnRejectClick { get; set; }
+
+    [Parameter] public string FileName { get; set; } = "Отчет_по_продажам.pdf";
+    [Parameter] public string DocumentType { get; set; } = "Отчет";
+    [Parameter] public string Sender { get; set; } = "Старший бухгалтер Мирзоева Б. Т. (Бухгалтерия)";
+    [Parameter] public string ReceivedDate { get; set; } = "23.04.2026 11:00 (ЧТ)";
+    [Parameter] public string StatusText { get; set; } = "Не подписан";
+    [Parameter] public string StatusDotClass { get; set; } = "orange";
+
+    [Parameter] public List<SignerInfo> Signers { get; set; } = new()
+    {
+        new() { Department = "Бухгалтерия", Name = "Мирзоева Б. Т.", Status = "Документ создан", IsSigned = true },
+        new() { Department = "Офис", Name = "Дьячков Е. Ю.", Status = "Ожидает подписания", IsSigned = false },
+    };
+
+    private async Task Close() => await OnClose.InvokeAsync();
+    private async Task OnSign() => await OnSignClick.InvokeAsync();
+    private async Task OnReject() => await OnRejectClick.InvokeAsync();
+
+    public class SignerInfo
+    {
+        public string Department { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Status { get; set; } = "";
+        public bool IsSigned { get; set; }
+    }
+}

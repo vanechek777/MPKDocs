@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "Windows Machine": {
+      "commandName": "Project",
+      "nativeDebugging": false
+    },
+    "Windows (если SEH / WebView2)": {
+      "commandName": "Project",
+      "nativeDebugging": false,
+      "environmentVariables": {
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS": "--disable-gpu --disable-gpu-compositing"
+      }
+    }
+  }
+}

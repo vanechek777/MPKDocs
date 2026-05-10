@@ -1,0 +1,48 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject IMobileShellService MobileShell
+
+<div class="app-shell @(MobileShell.IsSigningOnlyShell ? "app-shell--mobile-signing" : null)">
+    @if (MobileShell.IsSigningOnlyShell)
+    {
+        <MobileRouteLock />
+    }
+    <main class="app-main">
+        @Body
+    </main>
+
+    @if (!MobileShell.IsSigningOnlyShell)
+    {
+        <FabMenu />
+        <BottomNavBar />
+    }
+    else
+    {
+        <MobileSigningNav />
+    }
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Произошла непредвиденная ошибка.
+    <a href="." class="reload">Перезагрузить</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _uxBootstrapped;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _uxBootstrapped)
+            return;
+        _uxBootstrapped = true;
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.bootstrapUxFromStorage");
+        }
+        catch
+        {
+            /* WebView без localStorage / старый JS */
+        }
+    }
+}

@@ -1,0 +1,223 @@
+@* Модальное окно подтверждения OTP *@
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="Close">
+        <div class="modal-card" @onclick:stopPropagation>
+            <div class="modal-body" style="padding-top:var(--spacing-xl)">
+                <div class="otp-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </div>
+                <div class="otp-title">Подтвердите действие</div>
+                <div class="otp-desc">
+                    Подписание документа @DocumentName с помощью средства электронной подписи.<br/><br/>
+                    @if (string.IsNullOrWhiteSpace(PhoneHint))
+                    {
+                        <text>Введите 6-значный код из SMS.</text>
+                    }
+                    else
+                    {
+                        <text>Введите код из SMS, отправленного на @PhoneHint</text>
+                    }
+                </div>
+                <div class="otp-inputs">
+                    <input class="@CellClass(0)" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           autocorrect="off" spellcheck="false"
+                           value="@otpDigits[0]" @ref="_r0" @oninput="e => OnDigitInput(0, e)" @onkeydown="e => OnOtpKeyDown(0, e)" />
+                    <input class="@CellClass(1)" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           autocorrect="off" spellcheck="false"
+                           value="@otpDigits[1]" @ref="_r1" @oninput="e => OnDigitInput(1, e)" @onkeydown="e => OnOtpKeyDown(1, e)" />
+                    <input class="@CellClass(2)" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           autocorrect="off" spellcheck="false"
+                           value="@otpDigits[2]" @ref="_r2" @oninput="e => OnDigitInput(2, e)" @onkeydown="e => OnOtpKeyDown(2, e)" />
+                    <input class="@CellClass(3)" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           autocorrect="off" spellcheck="false"
+                           value="@otpDigits[3]" @ref="_r3" @oninput="e => OnDigitInput(3, e)" @onkeydown="e => OnOtpKeyDown(3, e)" />
+                    <input class="@CellClass(4)" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           autocorrect="off" spellcheck="false"
+                           value="@otpDigits[4]" @ref="_r4" @oninput="e => OnDigitInput(4, e)" @onkeydown="e => OnOtpKeyDown(4, e)" />
+                    <input class="@CellClass(5)" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           autocorrect="off" spellcheck="false"
+                           value="@otpDigits[5]" @ref="_r5" @oninput="e => OnDigitInput(5, e)" @onkeydown="e => OnOtpKeyDown(5, e)" />
+                </div>
+                @if (_invalidCode)
+                {
+                    <div class="otp-invalid-msg" role="alert">Неверный код!</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Режим без проверки на API: передаёт код родителю (например создание документа).</summary>
+    [Parameter] public EventCallback<string> OnConfirm { get; set; }
+    /// <summary>Если задано: вернуть false при неверном OTP, true при успехе или если родитель сам закрыл модалку / ошибка не OTP.</summary>
+    [Parameter] public Func<string, Task<bool>>? TrySubmitAsync { get; set; }
+    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string PhoneHint { get; set; } = "";
+
+    private readonly string[] otpDigits = new string[6] { "", "", "", "", "", "" };
+
+    private ElementReference _r0;
+    private ElementReference _r1;
+    private ElementReference _r2;
+    private ElementReference _r3;
+    private ElementReference _r4;
+    private ElementReference _r5;
+
+    private bool _invalidCode;
+
+    private ElementReference RefAt(int index) => index switch
+    {
+        0 => _r0,
+        1 => _r1,
+        2 => _r2,
+        3 => _r3,
+        4 => _r4,
+        5 => _r5,
+        _ => default,
+    };
+
+    private string CellClass(int index) =>
+        _invalidCode ? "otp-cell otp-cell-error" : "otp-cell";
+
+    private async Task Close()
+    {
+        ClearFormQuiet();
+        await OnClose.InvokeAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!IsVisible)
+            ClearFormQuiet();
+    }
+
+    private void ClearFormQuiet()
+    {
+        Array.Fill(otpDigits, "");
+        _invalidCode = false;
+    }
+
+    private static string OnlyDigits(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return System.Text.RegularExpressions.Regex.Replace(s, @"\D", "");
+    }
+
+    private async Task FocusCellAsync(int index)
+    {
+        if ((uint)index >= 6) return;
+        await InvokeAsync(async () =>
+        {
+            await Task.Yield();
+            try
+            {
+                await RefAt(index).FocusAsync();
+            }
+            catch { /* ref */ }
+        });
+    }
+
+    private async Task OnDigitInput(int index, ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString() ?? "";
+        var digits = OnlyDigits(raw);
+        // Только убираем подсветку ошибки; не очищаем все поля — иначе при первом же символе строка «схлопывается» и верный код не набрать.
+        if (_invalidCode && digits.Length > 0)
+            _invalidCode = false;
+
+        if (digits.Length == 0)
+        {
+            otpDigits[index] = "";
+            return;
+        }
+
+        if (digits.Length == 1)
+        {
+            otpDigits[index] = digits;
+            if (otpDigits.All(d => !string.IsNullOrEmpty(d)))
+            {
+                await SubmitCodeAsync();
+                return;
+            }
+
+            if (index < 5)
+                await FocusCellAsync(index + 1);
+            return;
+        }
+
+        var pos = index;
+        foreach (var ch in digits)
+        {
+            if (pos > 5) break;
+            if (!char.IsDigit(ch)) continue;
+            otpDigits[pos++] = ch.ToString();
+        }
+
+        if (otpDigits.All(d => !string.IsNullOrEmpty(d)))
+        {
+            await SubmitCodeAsync();
+            return;
+        }
+
+        var focusIx = Math.Clamp(pos, 0, 5);
+        await FocusCellAsync(focusIx);
+    }
+
+    private async Task OnOtpKeyDown(int index, Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        var isBackspace = e.Key == "Backspace" || e.Code == "Backspace";
+        if (!isBackspace) return;
+
+        if (_invalidCode)
+        {
+            ClearFormQuiet();
+            await FocusCellAsync(0);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(otpDigits[index])) return;
+        if (index <= 0) return;
+
+        otpDigits[index - 1] = "";
+        await FocusCellAsync(index - 1);
+    }
+
+    private async Task SubmitCodeAsync()
+    {
+        var code = string.Join("", otpDigits);
+
+        if (TrySubmitAsync is not null)
+        {
+            try
+            {
+                var ok = await TrySubmitAsync(code);
+                if (!ok)
+                {
+                    _invalidCode = true;
+                    return;
+                }
+            }
+            catch
+            {
+                _invalidCode = true;
+                return;
+            }
+
+            ClearFormQuiet();
+            return;
+        }
+
+        await OnConfirm.InvokeAsync(code);
+        ClearFormQuiet();
+    }
+}

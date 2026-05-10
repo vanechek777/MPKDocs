@@ -1,0 +1,83 @@
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+
+@if (fabOpen)
+{
+    <button type="button" class="fab-backdrop" aria-hidden="true" @onclick="CloseFab"></button>
+}
+
+<div class="fab-container @(fabOpen ? "fab-container--open" : "")">
+    <div class="fab-menu @(fabOpen ? "open" : "")">
+        <button type="button" class="fab-menu-item" @onclick="GoDrafts">
+            <img src="icons/drafts.png" alt="" style="width:18px;height:18px;opacity:0.7" />
+            Черновики
+            @if (draftCount > 0)
+            {
+                <span class="badge-count">@draftCount</span>
+            }
+        </button>
+        <button type="button" class="fab-menu-item" @onclick="GoCreateDocument">
+            <img src="icons/circled_plus.png" alt="" style="width:18px;height:18px;opacity:0.7" />
+            Новый документ
+        </button>
+    </div>
+
+    <button type="button" class="fab-btn @(fabOpen ? "open" : "")" @onclick="ToggleFab">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    </button>
+</div>
+
+@code {
+    private bool fabOpen;
+    private int draftCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var list = await DocsApi.GetMyDraftsAsync(100);
+            draftCount = list.Count;
+        }
+        catch
+        {
+            draftCount = 0;
+        }
+    }
+
+    private void ToggleFab()
+    {
+        fabOpen = !fabOpen;
+        if (fabOpen)
+            _ = RefreshDraftCountWhenOpenAsync();
+    }
+
+    private async Task RefreshDraftCountWhenOpenAsync()
+    {
+        try
+        {
+            draftCount = (await DocsApi.GetMyDraftsAsync(100)).Count;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private void CloseFab() => fabOpen = false;
+
+    private void GoCreateDocument()
+    {
+        CloseFab();
+        Navigation.NavigateTo("/create-document");
+    }
+
+    private void GoDrafts()
+    {
+        CloseFab();
+        Navigation.NavigateTo("/drafts");
+    }
+}

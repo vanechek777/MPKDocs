@@ -1,0 +1,111 @@
+@page "/register"
+@layout MPKDocumentsMAUI.Shared.Layout.AuthLayout
+
+@using System.ComponentModel.DataAnnotations
+@inject NavigationManager Nav
+@inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
+@inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div>
+                <h2 class="auth-title">Регистрация</h2>
+                <div class="auth-subtitle">МПК Документы</div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="auth-error">@_error</div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="OnSubmit">
+            <DataAnnotationsValidator />
+
+            <div class="form-group">
+                <label class="form-label">ФИО</label>
+                <InputText class="form-input" @bind-Value="_model.FullName" placeholder="Иванов Иван Иванович" />
+                <ValidationMessage For="() => _model.FullName" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Телефон</label>
+                <InputText class="form-input" @bind-Value="_model.PhoneNumber" placeholder="+79990000005" />
+                <ValidationMessage For="() => _model.PhoneNumber" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">ОБЯЗАТЕЛЬНО! Email используется для получения кодов подтверждения</label>
+                <InputText class="form-input" @bind-Value="_model.Email" type="email" placeholder="user@yandex.ru" />
+                <ValidationMessage For="() => _model.Email" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Пароль</label>
+                <InputText class="form-input" @bind-Value="_model.Password" type="password" />
+                <ValidationMessage For="() => _model.Password" />
+            </div>
+
+            <div class="auth-actions">
+                <button class="btn btn-green" disabled="@_busy" type="submit">
+                    @if (_busy)
+                    {
+                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Создаём…</span></span>
+                    }
+                    else
+                    {
+                        <span>Зарегистрироваться</span>
+                    }
+                </button>
+                <button class="btn btn-outline" type="button" @onclick="GoLogin">
+                    Уже есть аккаунт? Войти
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private RegisterModel _model = new();
+
+    private async Task OnSubmit()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            await Auth.RegisterAsync(_model.PhoneNumber, _model.FullName, _model.Password, _model.Email.Trim());
+            Nav.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/", replace: true);
+        }
+        catch
+        {
+            _error = "Не удалось зарегистрироваться. Телефон или email уже заняты, либо данные указаны неверно.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void GoLogin() => Nav.NavigateTo("/login");
+
+    private sealed class RegisterModel
+    {
+        [Required]
+        public string FullName { get; set; } = "";
+
+        [Required]
+        public string PhoneNumber { get; set; } = "";
+
+        [Required(ErrorMessage = "Укажите email")]
+        [EmailAddress(ErrorMessage = "Введите корректный email")]
+        public string Email { get; set; } = "";
+
+        [Required]
+        public string Password { get; set; } = "";
+    }
+}
+

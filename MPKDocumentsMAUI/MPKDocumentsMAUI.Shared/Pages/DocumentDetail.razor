@@ -1,0 +1,755 @@
+@page "/document/{DocId}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+@inject MPKDocumentsMAUI.Shared.Api.AuthApiClient AuthApi
+@using MPKDocumentsMAUI.Shared.Api
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@using MPKDocumentsMAUI.Shared.Nep
+
+<PageTitle>@docName — МПК Документы</PageTitle>
+
+<div class="page-content detail-page-wrap">
+    @if (isDocumentLoading)
+    {
+        <div class="detail-loading-overlay">
+            <LoadingSpinner />
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <div style="margin-bottom:12px;color:var(--text-secondary)">@loadError</div>
+    }
+    @* Header *@
+    <div class="detail-header">
+        <button class="detail-back" @onclick="GoBack">
+            <img src="icons/full_arrow_left.png" alt="" style="width:20px;height:20px;filter:brightness(0) invert(1)" />
+        </button>
+        <h1 class="detail-title">@docName</h1>
+    </div>
+
+    @* Two-column layout *@
+    <div class="detail-layout">
+        @* Left column — info *@
+        <div>
+            <h2 class="detail-section-title">Сведения о документе:</h2>
+            <div class="detail-info-block">
+                <div class="detail-field">
+                    <div class="detail-field-label">Отправитель:</div>
+                    <div class="detail-field-value">@initiatorName</div>
+                </div>
+                <div class="detail-field">
+                    <div class="detail-field-label">Вид документа:</div>
+                    <div class="detail-field-value">@templateName</div>
+                </div>
+                <div class="detail-field">
+                    <div class="detail-field-label">Статус:</div>
+                    <div class="detail-field-value">
+                        <span class="status-badge @StatusBadgeClass">@StatusText</span>
+                    </div>
+                </div>
+            </div>
+
+            @if (!IsCancelled && !IsDraft)
+            {
+                <h2 class="detail-section-title">Сведения о подписях:</h2>
+                <div class="detail-info-block">
+                    <div class="detail-field">
+                        <div class="detail-field-label">Требуется подписей:</div>
+                        <div class="detail-field-value">@totalSigners</div>
+                    </div>
+                    <div class="detail-field">
+                        <div class="detail-field-label">Подписали:</div>
+                        <div class="detail-field-value">@signedCount</div>
+                    </div>
+
+                    <button class="signers-toggle" @onclick="() => showSigners = !showSigners">
+                        @(showSigners ? "Скрыть" : "Открыть") список подписантов
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px">
+                            <polyline points="@(showSigners ? "18 15 12 9 6 15" : "6 9 12 15 18 9")"/>
+                        </svg>
+                    </button>
+
+                    @if (showSigners)
+                    {
+                        <div class="signers-list animate-in">
+                            @foreach (var s in SignersOrdered)
+                            {
+                                <div class="signer-item">
+                                    <span class="signer-icon">@SignerIcon(s.Status)</span>
+                                    @($"{s.Order}. {s.Name} ({s.Department})")
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Right column — document + actions *@
+        <div>
+            <h2 class="detail-section-title">Документ:</h2>
+            <div class="doc-file-card">
+                <div class="doc-file-main">
+                    <div>
+                        <div class="file-name">@docName</div>
+                        <div class="file-size">@attachmentSizeLabel</div>
+                    </div>
+                    <button type="button" class="download-btn" title="Скачать файл" disabled="@(!hasFileAttachment || isBusy)" @onclick="DownloadAttachmentAsync">
+                        <img src="icons/download.png" alt="" style="width:20px;height:20px;opacity:0.7" />
+                    </button>
+                </div>
+                @if (myNepExportAvailable)
+                {
+                    <div class="detail-nep-actions">
+                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@isBusy" @onclick="DownloadNepEsigAsync">Скачать НЭП (.esig)</button>
+                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@isBusy" @onclick="PrintNepCertificateAsync">Печать НЭП</button>
+                    </div>
+                }
+            </div>
+
+            <h2 class="detail-actions-title">Действия:</h2>
+            @if (IsCancelled)
+            {
+                <div class="detail-actions" style="color:var(--text-secondary);font-weight:700">
+                    Отправка отменена
+                </div>
+            }
+            else if (IsRejected)
+            {
+                <div class="detail-actions" style="color:var(--text-secondary);font-weight:700">
+                    Документ отклонен
+                </div>
+            }
+            else if (IsSigned)
+            {
+                <div class="detail-actions" style="color:var(--text-secondary);font-weight:700">
+                    Документ подписан
+                </div>
+            }
+            else if (IsDraft && IsInitiator)
+            {
+                <div class="detail-actions">
+                    @if (!MobileShell.IsSigningOnlyShell)
+                    {
+                        <button type="button" class="btn btn-green" @onclick="GoContinueDraft">Продолжить оформление</button>
+                    }
+                    else
+                    {
+                        <div style="color:var(--text-secondary);font-weight:600;font-size:var(--font-size-sm);line-height:1.4">
+                            Продолжить оформление черновика в этой версии нельзя. Откройте приложение на ПК или веб-версию.
+                        </div>
+                    }
+                </div>
+            }
+            else if (CanCancel)
+            {
+                <div class="detail-actions">
+                    <button class="btn btn-red" disabled="@isBusy" @onclick="CancelSendAsync">Отменить отправку</button>
+                </div>
+            }
+            else if (waitingForOthers)
+            {
+                <div class="detail-actions" style="color:var(--text-secondary);font-weight:700">
+                    Ожидаем других подписантов
+                </div>
+            }
+            else if (!canAct)
+            {
+                <div class="detail-actions" style="color:var(--text-secondary);font-weight:700">
+                    @if (MySigned)
+                    {
+                        <span>Вы уже подписали (ждём остальных)</span>
+                    }
+                    else if (MyRejected)
+                    {
+                        <span>Вы отклонили этот документ</span>
+                    }
+                    else
+                    {
+                        <span>Нет действий для этого документа</span>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="detail-actions">
+                    <button class="btn btn-green" disabled="@(isBusy || otpSendBusy)" @onclick="StartSignAsync">
+                        @if (otpSendBusy)
+                        {
+                            <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Отправка кода…</span></span>
+                        }
+                        else
+                        {
+                            <span>Подписать и закрыть</span>
+                        }
+                    </button>
+                    <button class="btn btn-red" @onclick="RejectAndClose" disabled="@isBusy">Отклонить и закрыть</button>
+                </div>
+            }
+
+            <div class="signatures-flow-title">Схема подписантов:</div>
+            <div class="signatures-flow">
+                <div class="sig-node">
+                    <div class="sig-node-dept">Создатель</div>
+                    <div class="sig-node-card @(initiatorSignedTask ? "signed-node" : "pending-node")">
+                        <div class="sig-node-name">@initiatorName</div>
+                        <div class="sig-node-status">@(initiatorSignedTask ? "Документ создан и подписан" : "Документ создан")</div>
+                    </div>
+                </div>
+                @foreach (var (s, idx) in SignersOrdered.Select((v, i) => (v, i)))
+                {
+                    <div class="sig-connector"></div>
+                    <div class="sig-node">
+                        <div class="sig-node-dept">@s.Department</div>
+                        <div class="sig-node-card @GetSignerCardClass(idx)">
+                            <div class="sig-node-name">@s.Name</div>
+                            <div class="sig-node-status">@GetSignerStatusText(idx)</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Modals *@
+<OtpConfirmModal IsVisible="showOtp" DocumentName="@docName" PhoneHint="@phoneOtpHint"
+                 OnClose="() => showOtp = false"
+                 TrySubmitAsync="TrySubmitSignOtpAsync" />
+
+<SuccessModal IsVisible="showSuccess" DocumentName="@docName"
+              OnClose="OnSuccessClosed" />
+
+@code {
+    [Parameter] public string DocId { get; set; } = "";
+
+    private int? _docId;
+    private string docName = "Документ";
+    private string initiatorName = "";
+    private string templateName = "";
+    private int signedCount;
+    private int totalSigners;
+    private string? loadError;
+    private bool isDocumentLoading;
+    private bool isBusy;
+
+    private bool showSigners = true;
+    private bool showOtp = false;
+    private bool showSuccess = false;
+    private bool otpSendBusy;
+    private string phoneOtpHint = "";
+
+    private string _leaveRoute = "/signing";
+
+    private void RefreshLeaveRoute()
+    {
+        _leaveRoute = "/signing";
+        try
+        {
+            var abs = Navigation.ToAbsoluteUri(Navigation.Uri);
+            var q = abs.Query;
+            if (string.IsNullOrEmpty(q) || q == "?") return;
+            var qs = q.TrimStart('?');
+            foreach (var pair in qs.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var eq = pair.IndexOf('=');
+                if (eq <= 0) continue;
+                var key = Uri.UnescapeDataString(pair[..eq]).Trim();
+                if (!string.Equals(key, "from", StringComparison.OrdinalIgnoreCase)) continue;
+                var val = eq < pair.Length - 1
+                    ? Uri.UnescapeDataString(pair[(eq + 1)..]).Trim().ToLowerInvariant()
+                    : "";
+                _leaveRoute = val switch
+                {
+                    "home" or "recent" => MobileShell.IsSigningOnlyShell ? "/signing" : "/",
+                    "signing" => "/signing",
+                    "create" => MobileShell.IsSigningOnlyShell ? "/signing" : "/create-document",
+                    _ => "/signing",
+                };
+                return;
+            }
+        }
+        catch
+        {
+            _leaveRoute = "/signing";
+        }
+    }
+
+    private void GoBack() => Navigation.NavigateTo(_leaveRoute);
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double size = bytes;
+        var unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+
+        return unit == 0 ? $"{bytes} {units[unit]}" : $"{size:0.##} {units[unit]}";
+    }
+
+    private async Task DownloadAttachmentAsync()
+    {
+        if (_docId is null || !hasFileAttachment) return;
+        isBusy = true;
+        loadError = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (body, ct) = await DocsApi.DownloadDocumentFileAsync(_docId.Value);
+            var mime = ct ?? attachmentMime ?? "application/octet-stream";
+            var safeName = string.IsNullOrWhiteSpace(docName) ? $"document-{_docId.Value}" : docName.Trim();
+            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
+            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
+            await mod.InvokeVoidAsync("downloadBase64", safeName, Convert.ToBase64String(body), mime);
+            await mod.DisposeAsync();
+        }
+        catch
+        {
+            loadError = "Не удалось скачать файл.";
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task DownloadNepEsigAsync()
+    {
+        if (_docId is null || !myNepExportAvailable) return;
+        isBusy = true;
+        loadError = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var body = await DocsApi.DownloadMyNepEsigAsync(_docId.Value);
+            var name = $"doc-{_docId.Value}-NEP.esig";
+            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
+            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
+            await mod.InvokeVoidAsync("downloadBase64", name, Convert.ToBase64String(body), "application/octet-stream");
+            await mod.DisposeAsync();
+        }
+        catch
+        {
+            loadError = "Не удалось скачать файл подписи.";
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task PrintNepCertificateAsync()
+    {
+        if (_docId is null || !myNepExportAvailable) return;
+        try
+        {
+            var html = NepCertificateHtml.BuildFromDocumentDetail(
+                docName,
+                _docId.Value,
+                templateName,
+                initiatorName,
+                string.IsNullOrWhiteSpace(mySignerNameForNep) ? "—" : mySignerNameForNep,
+                myNepSignedAtUtc,
+                myNepCryptoOk,
+                myDocumentContentHashHex,
+                myNepDocumentHashHex,
+                myNepSignatureHex);
+            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-print.js").ToString();
+            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
+            await mod.InvokeVoidAsync("openPrintWindow", html);
+            await mod.DisposeAsync();
+        }
+        catch
+        {
+            loadError = "Не удалось открыть окно печати.";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task StartSignAsync()
+    {
+        if (otpSendBusy || isBusy) return;
+        loadError = null;
+        otpSendBusy = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await AuthApi.SendOtpAsync();
+            showOtp = true;
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Не удалось отправить SMS с кодом: {ex.Message}";
+        }
+        finally
+        {
+            otpSendBusy = false;
+        }
+    }
+
+    private string? _status;
+    private bool canAct;
+    private bool waitingForOthers;
+    private string? myTaskStatus;
+    private bool IsRejected => string.Equals(_status, "REJECTED", StringComparison.OrdinalIgnoreCase);
+    private bool IsSigned => string.Equals(_status, "SIGNED", StringComparison.OrdinalIgnoreCase);
+    private bool IsCancelled => string.Equals(_status, "CANCELLED", StringComparison.OrdinalIgnoreCase);
+    private bool IsDraft => string.Equals(_status, "DRAFT", StringComparison.OrdinalIgnoreCase);
+    private bool MySigned => string.Equals(myTaskStatus, "SIGNED", StringComparison.OrdinalIgnoreCase);
+    private bool MyRejected => string.Equals(myTaskStatus, "REJECTED", StringComparison.OrdinalIgnoreCase);
+    private int? meId;
+    private int? _initiatorId;
+    private bool initiatorSignedTask;
+    private bool hasFileAttachment;
+    private bool myNepExportAvailable;
+    private string attachmentSizeLabel = "Файл не прикреплён";
+    private string? attachmentMime;
+    private long? attachmentSizeBytes;
+    private string? myNepSignedAtUtc;
+    private bool myNepCryptoOk;
+    private string? myDocumentContentHashHex;
+    private string? myNepDocumentHashHex;
+    private string? myNepSignatureHex;
+    private string mySignerNameForNep = "";
+    private bool IsInitiator => meId is not null && _initiatorId is not null && _initiatorId.Value == meId.Value;
+    private bool CanCancel => IsInitiator && !IsSigned && !IsRejected && !IsCancelled && !IsDraft;
+
+    private string StatusText
+        => IsCancelled
+            ? "Отменён"
+            : IsDraft
+                ? "Черновик"
+            : IsRejected
+            ? "Отклонён"
+            : (IsSigned || MySigned)
+                ? (totalSigners > 0 ? $"Подписан ({signedCount}/{totalSigners})" : "Подписан")
+                : (totalSigners > 0 ? $"Не подписан ({signedCount}/{totalSigners})" : "Не подписан");
+
+    private string StatusBadgeClass
+        => IsCancelled
+            ? "cancelled"
+            : IsDraft
+                ? "draft"
+            : IsRejected
+                ? "rejected"
+            : (IsSigned || MySigned)
+                ? "signed"
+                : "unsigned";
+
+    private void GoContinueDraft()
+    {
+        if (_docId is null) return;
+        Navigation.NavigateTo($"/create-document?draft={_docId.Value}");
+    }
+
+    private void RejectAndClose()
+    {
+        _ = RejectAsync();
+    }
+
+    private List<SignerItem> Signers { get; set; } = new();
+    private IReadOnlyList<SignerItem> SignersOrdered => Signers.OrderBy(s => s.Order).ToList();
+
+    private int RejectedByIndex => SignersOrdered.ToList().FindIndex(s => s.Status == "REJECTED");
+
+    private string GetSignerCardClass(int idx)
+    {
+        if (IsCancelled)
+        {
+            var st0 = SignersOrdered.ElementAtOrDefault(idx)?.Status ?? "PENDING";
+            return string.Equals(st0, "SIGNED", StringComparison.OrdinalIgnoreCase) ? "signed-node" : "skipped-node";
+        }
+
+        if (IsRejected)
+        {
+            if (RejectedByIndex >= 0)
+            {
+                if (idx == RejectedByIndex) return "rejected-node";
+                if (idx > RejectedByIndex) return "skipped-node";
+                return "signed-node";
+            }
+            return "pending-node";
+        }
+
+        // Non-rejected: show real task statuses
+        var st = SignersOrdered.ElementAtOrDefault(idx)?.Status ?? "PENDING";
+        if (string.Equals(st, "SIGNED", StringComparison.OrdinalIgnoreCase)) return "signed-node";
+        if (string.Equals(st, "CANCELLED", StringComparison.OrdinalIgnoreCase)) return "skipped-node";
+        return "pending-node";
+    }
+
+    private string GetSignerStatusText(int idx)
+    {
+        var st = SignersOrdered.ElementAtOrDefault(idx)?.Status ?? "PENDING";
+        if (string.Equals(st, "SIGNED", StringComparison.OrdinalIgnoreCase))
+        {
+            var sig = SignersOrdered.ElementAtOrDefault(idx)?.SignatureType;
+            return string.Equals(sig, "NEP", StringComparison.OrdinalIgnoreCase) ? "Подписан • НЭП" : "Подписан";
+        }
+        if (string.Equals(st, "REJECTED", StringComparison.OrdinalIgnoreCase)) return "Отклонил";
+        if (IsCancelled || string.Equals(st, "CANCELLED", StringComparison.OrdinalIgnoreCase)) return "Не подписан";
+        return "Ожидает подписи";
+    }
+
+    private static string SignerIcon(string status) =>
+        status.ToUpperInvariant() switch
+        {
+            "SIGNED" => "✅",
+            "REJECTED" => "❌",
+            _ => "⏳",
+        };
+
+    private record SignerItem(int Order, string Department, string Name, string Status, string? SignatureType);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loadError = null;
+        RefreshLeaveRoute();
+        if (!int.TryParse(DocId, out var id))
+        {
+            loadError = "Некорректный идентификатор документа.";
+            return;
+        }
+
+        if (_docId == id) return;
+        _docId = id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_docId is null) return;
+        isDocumentLoading = true;
+        try
+        {
+            if (meId is null)
+            {
+                try
+                {
+                    var st = await AuthStateProvider.GetAuthenticationStateAsync();
+                    var u = st.User;
+                    var idStr = u.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (int.TryParse(idStr, out var id))
+                        meId = id;
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+
+            try
+            {
+                var me = await AuthApi.MeAsync();
+                phoneOtpHint = PhoneDisplay.MaskRu(me.phone_number);
+            }
+            catch
+            {
+                phoneOtpHint = "";
+            }
+
+            var d = await DocsApi.GetDetailAsync(_docId.Value);
+            _status = d.status;
+            canAct = d.can_act;
+            waitingForOthers = d.waiting_for_other_signers;
+            myTaskStatus = d.my_task_status;
+            docName = (d.content != null && d.content.TryGetValue("fileName", out var fn) && fn is not null)
+                ? fn.ToString() ?? d.template_name
+                : d.template_name;
+
+            initiatorName = d.initiator_name;
+            _initiatorId = d.initiator_id;
+            templateName = d.template_name;
+            signedCount = d.signed_count;
+            totalSigners = d.total_signers;
+
+            hasFileAttachment = d.has_file_attachment;
+            myNepExportAvailable = d.my_nep_export_available;
+            attachmentMime = null;
+            attachmentSizeBytes = null;
+            if (d.content is not null)
+            {
+                if (d.content.TryGetValue("fileMime", out var fm) && fm is not null)
+                    attachmentMime = fm.ToString();
+                if (d.content.TryGetValue("fileSize", out var fs) && fs is not null && long.TryParse(fs.ToString(), out var lbs))
+                    attachmentSizeBytes = lbs;
+            }
+
+            attachmentSizeLabel = !hasFileAttachment
+                ? "Файл не прикреплён"
+                : attachmentSizeBytes is long sz
+                    ? FormatBytes(sz)
+                    : "Вложение";
+
+            myNepCryptoOk = false;
+            myNepSignedAtUtc = null;
+            mySignerNameForNep = "";
+            myDocumentContentHashHex = d.document_content_hash_hex;
+            myNepDocumentHashHex = d.my_nep_document_hash_hex;
+            myNepSignatureHex = d.my_nep_signature_hex;
+            if (meId is not null)
+            {
+                var mine = d.signers.FirstOrDefault(s => s.user_id == meId.Value);
+                if (mine is not null)
+                {
+                    mySignerNameForNep = mine.user_name ?? "";
+                    if (mine.processed_at is { } pat)
+                        myNepSignedAtUtc = pat.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss") + "Z";
+                    myNepCryptoOk = string.Equals(mine.signature_type, "NEP", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            initiatorSignedTask = d.signers.Any(s =>
+                s.user_id == d.initiator_id &&
+                string.Equals(s.status, "SIGNED", StringComparison.OrdinalIgnoreCase));
+
+            // Не дублируем создателя в схеме: показываем его отдельным узлом выше
+            Signers = d.signers
+                .Where(s => s.user_id is null || s.user_id != d.initiator_id)
+                .Select(s => new SignerItem(
+                    Order: s.order,
+                    Department: s.department ?? "—",
+                    Name: s.user_name ?? "—",
+                    Status: (s.status ?? "PENDING").ToUpperInvariant(),
+                    SignatureType: s.signature_type
+                ))
+                .ToList();
+
+            try
+            {
+                await DocsApi.RecordDocumentViewAsync(_docId.Value);
+            }
+            catch
+            {
+            }
+        }
+        catch
+        {
+            loadError = "Не удалось загрузить документ. Проверь, что API запущено.";
+        }
+        finally
+        {
+            isDocumentLoading = false;
+        }
+    }
+
+    private async Task CancelSendAsync()
+    {
+        if (_docId is null) return;
+        if (isBusy) return;
+        isBusy = true;
+        loadError = "Отменяем отправку...";
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var res = await DocsApi.CancelAsync(_docId.Value);
+            if (!res.ok)
+            {
+                loadError = "Не удалось отменить отправку.";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            await LoadAsync();
+            loadError = null;
+        }
+        catch
+        {
+            loadError = "Не удалось отменить отправку. Проверь соединение с API.";
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Возвращает false только при неверном OTP (модалка подсветит поля).</summary>
+    private async Task<bool> TrySubmitSignOtpAsync(string code)
+    {
+        if (_docId is null) return true;
+
+        isBusy = true;
+        loadError = null;
+        try
+        {
+            var outcome = await DocsApi.SignDocumentAsync(_docId.Value, code);
+            if (outcome.InvalidOtp)
+                return false;
+
+            if (!outcome.Ok || outcome.Data is null)
+            {
+                loadError = "Ошибка подписи. Проверь соединение с API.";
+                showOtp = false;
+                await InvokeAsync(StateHasChanged);
+                return true;
+            }
+
+            if (!outcome.Data.ok)
+            {
+                loadError = "Не удалось подписать: нет задания на подпись для текущего пользователя.";
+                showOtp = false;
+                await InvokeAsync(StateHasChanged);
+                return true;
+            }
+
+            showOtp = false;
+            await InvokeAsync(StateHasChanged);
+            await LoadAsync();
+            showSuccess = true;
+            return true;
+        }
+        catch
+        {
+            loadError = "Ошибка подписи. Проверь соединение с API.";
+            showOtp = false;
+            await InvokeAsync(StateHasChanged);
+            return true;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void OnSuccessClosed()
+    {
+        showSuccess = false;
+        Navigation.NavigateTo(_leaveRoute);
+    }
+
+    private async Task RejectAsync()
+    {
+        if (_docId is null) return;
+        isBusy = true;
+        try
+        {
+            var res = await DocsApi.RejectAsync(_docId.Value, reason: null);
+            if (!res.ok)
+            {
+                loadError = "Не удалось отклонить: нет задания для отклонения.";
+                return;
+            }
+            Navigation.NavigateTo(_leaveRoute);
+        }
+        catch
+        {
+            loadError = "Ошибка отклонения. Проверь соединение с API.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

@@ -1,0 +1,731 @@
+@page "/"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@implements IDisposable
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Routing
+@using MPKDocumentsMAUI.Shared.Api
+@inject IJSRuntime JS
+@inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+@inject MPKDocumentsMAUI.Shared.Api.AuthApiClient AuthApi
+@inject NavigationManager Navigation
+
+<PageTitle>@(showArchive ? "Архив" : "Недавние") — МПК Документы</PageTitle>
+
+<div class="page-content">
+    <div class="page-header">
+        <div class="page-header-title-group">
+            <h1 class="page-title">@(showArchive ? "Архив" : "Недавние")</h1>
+            <div class="archive-mini-toggle" role="group" aria-label="Период отображения">
+                <button type="button"
+                        class="archive-mini-toggle__seg @(!showArchive ? "active" : "")"
+                        @onclick="() => SetArchiveView(false)">Главная</button>
+                <button type="button"
+                        class="archive-mini-toggle__seg @(showArchive ? "active" : "")"
+                        @onclick="() => SetArchiveView(true)">Архив</button>
+            </div>
+        </div>
+        <div class="search-bar-stack">
+            <div class="search-bar">
+                <input type="text" placeholder="Поиск..." value="@searchQuery" @oninput="OnSearchInput" />
+                <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </div>
+            <label class="search-in-template-types">
+                <input type="checkbox" checked="@searchInDocumentTypes" @onchange="OnSearchInDocumentTypesChange" />
+                <span>Искать в типах документов</span>
+            </label>
+        </div>
+    </div>
+
+    @if (activePopover != HomeFilterPopover.None)
+    {
+        <button type="button" class="filter-sheet-backdrop" aria-hidden="true" @onclick="ClosePopover"></button>
+    }
+
+    <div class="filter-sheet-bar">
+        <div class="filter-row filter-sheet-row">
+            <div class="filter-sheet-anchor">
+                <button type="button"
+                        class="chip @(filterByDate.HasValue ? "chip-date-set" : "") @(activePopover == HomeFilterPopover.Date ? "chip-popover-target" : "")"
+                        @onclick="() => TogglePopover(HomeFilterPopover.Date)"
+                        @ref="_dateAnchor">
+                    <svg class="chip-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    @(filterByDate.HasValue ? filterByDate.Value.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture) : "Все")
+                </button>
+                @if (activePopover == HomeFilterPopover.Date)
+                {
+                    <div class="filter-sheet-popover filter-sheet-popover--calendar" @onclick:stopPropagation="true" @ref="_datePopover">
+                        <div class="filter-sheet-popover-title">Календарь</div>
+                        <p class="filter-sheet-cal-intro">Фильтр по дате <strong>получения</strong> документов.</p>
+                        <div class="filter-sheet-quick-dates">
+                            <button type="button" class="filter-sheet-chip" @onclick='() => SetFilterDate(LocalToday)'>Сегодня</button>
+                            <button type="button" class="filter-sheet-chip" @onclick='() => SetFilterDate(LocalToday.AddDays(-1))'>Вчера</button>
+                            <button type="button" class="filter-sheet-chip" @onclick='() => SetFilterDate(LocalToday.AddDays(-7))'>7 дней назад</button>
+                        </div>
+                        <div class="filter-cal">
+                            <div class="filter-cal-header">
+                                <button type="button" class="filter-cal-nav" @onclick="PrevMonth" aria-label="Предыдущий месяц">‹</button>
+                                <div class="filter-cal-title">@CalendarTitle</div>
+                                <button type="button" class="filter-cal-nav" @onclick="NextMonth" aria-label="Следующий месяц">›</button>
+                            </div>
+                            <div class="filter-cal-weekdays">
+                                <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+                            </div>
+                            <div class="filter-cal-grid">
+                                @foreach (var day in CalendarDays)
+                                {
+                                    <button type="button"
+                                            class="filter-cal-day @GetDayClass(day)"
+                                            disabled="@(!day.InMonth)"
+                                            @onclick="() => SetFilterDate(day.Date)">
+                                        @day.Date.Day
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <div class="filter-sheet-popover-actions">
+                            <button type="button" class="btn btn-secondary btn-sm" @onclick="ClearDateFilter">Все даты</button>
+                            <button type="button" class="btn btn-maroon btn-sm" @onclick="ClosePopover">Готово</button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="filter-sheet-anchor">
+                <button type="button"
+                        class="chip @(activePopover == HomeFilterPopover.Sort ? "chip-popover-target" : "")"
+                        @onclick="() => TogglePopover(HomeFilterPopover.Sort)">
+                    <img src="icons/sorting.png" alt="" />
+                    @SortChipLabel
+                </button>
+                @if (activePopover == HomeFilterPopover.Sort)
+                {
+                    <div class="filter-sheet-popover" @onclick:stopPropagation="true">
+                        <div class="filter-sheet-popover-title">Сортировка</div>
+                        <p class="filter-sheet-cal-intro filter-sheet-cal-intro--tight">Порядок карточек в списке.</p>
+                        <div class="filter-sheet-options">
+                            <button type="button" class="filter-sheet-option @(sortOption == HomeSortOption.NewestFirst ? "selected" : "")" @onclick="() => SelectSort(HomeSortOption.NewestFirst)">Сначала новые</button>
+                            <button type="button" class="filter-sheet-option @(sortOption == HomeSortOption.OldestFirst ? "selected" : "")" @onclick="() => SelectSort(HomeSortOption.OldestFirst)">Сначала старые</button>
+                            <button type="button" class="filter-sheet-option @(sortOption == HomeSortOption.SignedGroupFirst ? "selected" : "")" @onclick="() => SelectSort(HomeSortOption.SignedGroupFirst)">Сначала подписанные</button>
+                            <button type="button" class="filter-sheet-option @(sortOption == HomeSortOption.UnsignedGroupFirst ? "selected" : "")" @onclick="() => SelectSort(HomeSortOption.UnsignedGroupFirst)">Сначала неподписанные</button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="filter-sheet-anchor filter-sheet-anchor--popover-anchor-end">
+                <button type="button"
+                        class="chip @(activePopover == HomeFilterPopover.Category ? "chip-popover-target" : "")"
+                        @onclick="() => TogglePopover(HomeFilterPopover.Category)">
+                    <img src="icons/category.png" alt="" />
+                    @CategoryChipLabel
+                </button>
+                @if (activePopover == HomeFilterPopover.Category)
+                {
+                    <div class="filter-sheet-popover filter-sheet-popover--wide" @onclick:stopPropagation="true">
+                        <div class="filter-sheet-popover-title">Отбор по статусу</div>
+                        <p class="filter-sheet-cal-intro filter-sheet-cal-intro--tight">Показывать в списке только выбранный тип документов.</p>
+                        <div class="filter-sheet-options">
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.All ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.All)">Все</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.UnsignedOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.UnsignedOnly)">Только неподписанные</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.SignedOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.SignedOnly)">Только подписанные</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.SentOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.SentOnly)">Только отправленные</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.FullySignedOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.FullySignedOnly)">Только полностью подписанные</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.PartiallySignedOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.PartiallySignedOnly)">Только неполностью подписанные</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.RejectedOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.RejectedOnly)">Только отклонённые</button>
+                            <button type="button" class="filter-sheet-option @(categoryFilter == HomeCategoryFilter.CancelledOnly ? "selected" : "")" @onclick="() => SelectCategory(HomeCategoryFilter.CancelledOnly)">Только отменённые</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="tabs-row">
+        <button type="button" class="tab @(activeTab == 0 ? "active" : "")" @onclick="() => SetTab(0)">Все</button>
+        <button type="button" class="tab @(activeTab == 1 ? "active" : "")" @onclick="() => SetTab(1)">Полученные</button>
+        <button type="button" class="tab @(activeTab == 2 ? "active" : "")" @onclick="() => SetTab(2)">Отправленные</button>
+    </div>
+
+    <div class="document-list">
+        @if (isLoading)
+        {
+            <LoadingSpinner Center />
+        }
+        else if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <div style="color: var(--text-secondary); padding: 8px 2px;">@loadError</div>
+        }
+        else
+        {
+        @foreach (var doc in GetFilteredDocuments())
+        {
+            <div class="document-card animate-in @(doc.WaitingForOthers ? "is-queue-waiting" : "")" style="animation-delay: @(doc.Index * 0.03)s"
+                 @onclick="() => OpenDocument(doc)">
+                <div class="doc-icon">
+                    <img src="icons/document.png" alt="PDF" />
+                </div>
+                <div class="doc-info">
+                    <div class="doc-name-row">
+                        @if (!doc.HasViewed && !doc.SuppressUnreadIndicator && !doc.IsSent)
+                        {
+                            <span class="doc-unread-tooltip">
+                                <span class="doc-side-dot unread-dot" aria-hidden="true"></span>
+                                <span class="doc-unread-tooltip__bubble" role="tooltip">Не просмотрено</span>
+                            </span>
+                        }
+                        <div class="doc-name">@doc.FileName</div>
+                    </div>
+                    <div class="doc-meta">
+                        <span>Получен: @doc.Date</span>
+                        <span class="author">
+                            @if (!doc.IsSent)
+                            {
+                                <img src="icons/receive_arrow.png" alt="" class="author-ico author-ico--receive" width="9" height="9" />
+                            }
+                            else
+                            {
+                                <svg class="author-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5" /></svg>
+                            }
+                            @doc.Author
+                        </span>
+                    </div>
+                </div>
+                <div class="doc-status">
+                    @if (doc.IsSent && string.Equals(doc.StatusClass, "sent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="status-sent-read-tooltip">
+                            <span class="status-badge @doc.StatusClass">@doc.StatusText</span>
+                            <span class="status-sent-read-tooltip__bubble" role="tooltip">
+                                @if (doc.RecipientsTotal <= 0)
+                                {
+                                    <span class="status-sent-read-tooltip__line">Нет назначенных подписантов</span>
+                                }
+                                else if (doc.RecipientsViewedNames.Count == 0)
+                                {
+                                    <span class="status-sent-read-tooltip__line">Пока никто не открыл документ</span>
+                                }
+                                else
+                                {
+                                    <span class="status-sent-read-tooltip__heading">Просмотрели:</span>
+                                    @foreach (var name in doc.RecipientsViewedNames)
+                                    {
+                                        <span class="status-sent-read-tooltip__line">@name</span>
+                                    }
+                                }
+                            </span>
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="status-badge @doc.StatusClass">@doc.StatusText</span>
+                    }
+                    @if (doc.IsSent && doc.SignTotal > 0 && !string.Equals(doc.StatusClass, "cancelled", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="status-badge progress">@($"{doc.SignProgress}/{doc.SignTotal}")</span>
+                    }
+                    @if (doc.HasChevron && !doc.WaitingForOthers)
+                    {
+                        <svg class="doc-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                    }
+                </div>
+            </div>
+        }
+        }
+    </div>
+</div>
+
+<DocumentInfoModal IsVisible="showDocModal"
+                   FileName="@selectedDoc?.FileName"
+                   StatusText="@(selectedDoc?.StatusText ?? "")"
+                   StatusDotClass="@GetStatusDotClass(selectedDoc?.StatusClass)"
+                   OnClose="CloseDocModal"
+                   OnSignClick="OnModalSign"
+                   OnRejectClick="CloseDocModal" />
+
+<OtpConfirmModal IsVisible="showOtp"
+                 DocumentName="@(selectedDoc?.FileName ?? "")"
+                 PhoneHint="@otpPhoneHint"
+                 OnClose="() => showOtp = false"
+                 TrySubmitAsync="TrySubmitHomeSignOtpAsync" />
+
+<SuccessModal IsVisible="showSuccess"
+              DocumentName="@(selectedDoc?.FileName ?? "")"
+              OnClose="OnSuccessClosed" />
+
+@code {
+    private string searchQuery = "";
+    private bool searchInDocumentTypes = true;
+    private bool showArchive;
+    private int activeTab;
+    private HomeFilterPopover activePopover;
+    private DateTime? filterByDate;
+    private DateTime? dateDraft;
+    private DateTime calendarMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private HomeSortOption sortOption = HomeSortOption.NewestFirst;
+    private HomeCategoryFilter categoryFilter = HomeCategoryFilter.All;
+
+    private bool showDocModal;
+    private bool showOtp;
+    private bool showSuccess;
+    private DocumentItem? selectedDoc;
+    private string otpPhoneHint = "";
+
+    private bool isLoading;
+    private string? loadError;
+    private int _documentsLoadId;
+
+    private string SortChipLabel => sortOption switch
+    {
+        HomeSortOption.OldestFirst => "Сначала старые",
+        HomeSortOption.SignedGroupFirst => "Сначала подписанные",
+        HomeSortOption.UnsignedGroupFirst => "Сначала неподписанные",
+        _ => "Сначала новые",
+    };
+
+    private string CategoryChipLabel => categoryFilter switch
+    {
+        HomeCategoryFilter.UnsignedOnly => "Неподписанные",
+        HomeCategoryFilter.SignedOnly => "Подписанные",
+        HomeCategoryFilter.SentOnly => "Отправленные",
+        HomeCategoryFilter.FullySignedOnly => "Полностью подписанные",
+        HomeCategoryFilter.PartiallySignedOnly => "Частично подписанные",
+        HomeCategoryFilter.RejectedOnly => "Отклонённые",
+        HomeCategoryFilter.CancelledOnly => "Отменённые",
+        _ => "Выбрать категорию",
+    };
+
+    private string DateInputValue =>
+        (dateDraft ?? filterByDate)?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
+
+    /// <summary>Локальный «сегодня» у пользователя для пресетов календаря.</summary>
+    private static DateTime LocalToday => DateTime.Today;
+
+    private static CultureInfo RuCulture => new("ru-RU");
+
+    private string CalendarTitle => calendarMonth.ToString("MMMM yyyy", RuCulture);
+
+    private IEnumerable<CalendarDay> CalendarDays => BuildCalendarDays(calendarMonth);
+
+    private void SetFilterDate(DateTime day)
+    {
+        filterByDate = dateDraft = day.Date;
+    }
+
+    private void TogglePopover(HomeFilterPopover next)
+    {
+        if (activePopover == next)
+        {
+            activePopover = HomeFilterPopover.None;
+            return;
+        }
+
+        activePopover = next;
+        if (next == HomeFilterPopover.Date)
+        {
+            dateDraft = filterByDate;
+            var baseDay = (filterByDate ?? LocalToday).Date;
+            calendarMonth = new DateTime(baseDay.Year, baseDay.Month, 1);
+            _needsPopoverPosition = true;
+        }
+    }
+
+    private void ClosePopover() => activePopover = HomeFilterPopover.None;
+
+    private void PrevMonth() => calendarMonth = calendarMonth.AddMonths(-1);
+    private void NextMonth() => calendarMonth = calendarMonth.AddMonths(1);
+
+    private void ClearDateFilter()
+    {
+        filterByDate = null;
+        dateDraft = null;
+        ClosePopover();
+    }
+
+    private ElementReference _dateAnchor;
+    private ElementReference _datePopover;
+    private bool _needsPopoverPosition;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (activePopover == HomeFilterPopover.Date && _needsPopoverPosition)
+        {
+            _needsPopoverPosition = false;
+            await JS.InvokeVoidAsync("MPKDocuments.positionPopover", _dateAnchor, _datePopover, new { gap = 10, pad = 12 });
+        }
+    }
+
+    private string GetDayClass(CalendarDay day)
+    {
+        var cls = day.InMonth ? "" : "is-out";
+        if (day.Date.Date == LocalToday) cls += " is-today";
+        if (filterByDate.HasValue && day.Date.Date == filterByDate.Value.Date) cls += " is-selected";
+        return cls.Trim();
+    }
+
+    private static IEnumerable<CalendarDay> BuildCalendarDays(DateTime monthFirstDay)
+    {
+        var first = new DateTime(monthFirstDay.Year, monthFirstDay.Month, 1);
+        var offset = ((int)first.DayOfWeek + 6) % 7; // Mon=0 ... Sun=6
+        var gridStart = first.AddDays(-offset);
+
+        for (var i = 0; i < 42; i++)
+        {
+            var d = gridStart.AddDays(i);
+            yield return new CalendarDay(d, d.Month == first.Month);
+        }
+    }
+
+    private readonly record struct CalendarDay(DateTime Date, bool InMonth);
+
+    private void SelectSort(HomeSortOption option)
+    {
+        sortOption = option;
+        ClosePopover();
+    }
+
+    private void SelectCategory(HomeCategoryFilter option)
+    {
+        categoryFilter = option;
+        ClosePopover();
+    }
+
+    private bool PassesCategory(DocumentItem d)
+    {
+        switch (categoryFilter)
+        {
+            case HomeCategoryFilter.UnsignedOnly:
+                return d.StatusClass == "unsigned";
+            case HomeCategoryFilter.SignedOnly:
+                return d.StatusClass == "signed";
+            case HomeCategoryFilter.SentOnly:
+                return d.StatusClass == "sent";
+            case HomeCategoryFilter.RejectedOnly:
+                return d.StatusClass == "rejected";
+            case HomeCategoryFilter.CancelledOnly:
+                return d.StatusClass == "cancelled";
+            case HomeCategoryFilter.FullySignedOnly:
+                return d.StatusClass == "signed" && d.SignTotal > 0 && d.SignProgress >= d.SignTotal;
+            case HomeCategoryFilter.PartiallySignedOnly:
+                return d.SignTotal > 0 && d.SignProgress > 0 && d.SignProgress < d.SignTotal;
+            default:
+                return true;
+        }
+    }
+
+    private static int GroupUnsignedFirst(DocumentItem d) =>
+        d.StatusClass switch { "unsigned" => 0, "signed" => 1, "sent" => 2, "rejected" => 3, "cancelled" => 4, _ => 9 };
+
+    private static int GroupSignedFirst(DocumentItem d) =>
+        d.StatusClass switch { "signed" => 0, "unsigned" => 1, "sent" => 2, "rejected" => 3, "cancelled" => 4, _ => 9 };
+
+    private IEnumerable<DocumentItem> GetFilteredDocuments()
+    {
+        IEnumerable<DocumentItem> q = documents;
+
+        // Server already filters by tab & q; client keeps extra filters.
+
+        if (filterByDate.HasValue)
+            q = q.Where(d => d.ReceivedAt.Date == filterByDate.Value.Date);
+
+        q = q.Where(PassesCategory);
+
+        IEnumerable<DocumentItem> ordered = sortOption switch
+        {
+            HomeSortOption.OldestFirst => q.OrderBy(d => d.ReceivedAt),
+            HomeSortOption.UnsignedGroupFirst => q.OrderBy(GroupUnsignedFirst).ThenByDescending(d => d.ReceivedAt),
+            HomeSortOption.SignedGroupFirst => q.OrderBy(GroupSignedFirst).ThenByDescending(d => d.ReceivedAt),
+            _ => q.OrderByDescending(d => d.ReceivedAt),
+        };
+
+        return ordered.ToList();
+    }
+
+    private void OpenDocModal(DocumentItem doc)
+    {
+        selectedDoc = doc;
+        showDocModal = true;
+    }
+
+    private void OpenDocument(DocumentItem doc)
+    {
+        if (doc.WaitingForOthers) return;
+        Navigation.NavigateTo($"/document/{doc.Id}?from=home");
+    }
+
+    private void CloseDocModal() => showDocModal = false;
+
+    private async Task OnModalSign()
+    {
+        showDocModal = false;
+        loadError = null;
+        try
+        {
+            await AuthApi.SendOtpAsync();
+            showOtp = true;
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Не удалось отправить SMS с кодом: {ex.Message}";
+        }
+    }
+
+    private async Task<bool> TrySubmitHomeSignOtpAsync(string code)
+    {
+        if (selectedDoc is null) return true;
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var outcome = await DocsApi.SignDocumentAsync(selectedDoc.Id, code);
+            if (outcome.InvalidOtp)
+                return false;
+
+            if (!outcome.Ok || outcome.Data is null)
+            {
+                loadError = "Ошибка подписи. Проверь соединение с API.";
+                showOtp = false;
+                await InvokeAsync(StateHasChanged);
+                return true;
+            }
+
+            if (!outcome.Data.ok)
+            {
+                loadError = "Не удалось подписать документ.";
+                showOtp = false;
+                await InvokeAsync(StateHasChanged);
+                return true;
+            }
+
+            showOtp = false;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(150);
+            showSuccess = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Подписание не выполнено: {ex.Message}";
+            showOtp = false;
+            await InvokeAsync(StateHasChanged);
+            return true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnSuccessClosed() => showSuccess = false;
+
+    private string GetStatusDotClass(string? statusClass) => statusClass switch
+    {
+        "unsigned" => "orange",
+        "signed" => "green",
+        "sent" => "blue",
+        "rejected" => "orange",
+        "cancelled" => "grey",
+        _ => "orange",
+    };
+
+    private List<DocumentItem> documents = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnNavigationLocationChanged;
+        try
+        {
+            var me = await AuthApi.MeAsync();
+            otpPhoneHint = PhoneDisplay.MaskRu(me.phone_number);
+        }
+        catch
+        {
+            otpPhoneHint = "";
+        }
+        await LoadDocumentsAsync();
+    }
+
+    private string? _lastRelativePath;
+
+    private async void OnNavigationLocationChanged(object? _, LocationChangedEventArgs e)
+    {
+        try
+        {
+            var rel = (Navigation.ToBaseRelativePath(e.Location) ?? "").Trim().TrimStart('/');
+            var cameFromDocument = _lastRelativePath != null
+                && _lastRelativePath.StartsWith("document/", StringComparison.OrdinalIgnoreCase);
+            _lastRelativePath = rel;
+            if (cameFromDocument && string.IsNullOrEmpty(rel))
+                await InvokeAsync(LoadDocumentsAsync);
+        }
+        catch
+        {
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnNavigationLocationChanged;
+
+    private async Task LoadDocumentsAsync()
+    {
+        var loadId = ++_documentsLoadId;
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var tab = activeTab switch { 1 => "received", 2 => "sent", _ => "all" };
+            var items = await DocsApi.GetRecentAsync(
+                tab,
+                string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery,
+                50,
+                showArchive,
+                searchInDocumentTypes);
+            if (loadId != _documentsLoadId) return;
+
+            documents = items
+                .Select((d, idx) => MapToUi(d, idx))
+                .ToList();
+        }
+        catch
+        {
+            if (loadId != _documentsLoadId) return;
+            loadError = "Не удалось загрузить документы. Проверь, что API запущено.";
+            documents = new();
+        }
+        finally
+        {
+            if (loadId == _documentsLoadId)
+                isLoading = false;
+        }
+    }
+
+    private static DocumentItem MapToUi(MPKDocumentsMAUI.Shared.Api.DocumentListItemDto d, int idx)
+    {
+        var created = d.created_at ?? DateTime.Now;
+        var date = created.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+        var st = (d.status ?? "").ToUpperInvariant();
+        var suppressUnread = st is "CANCELLED" or "REJECTED";
+
+        var (statusClass, statusText) = MapStatus(d.status, d.signed_count, d.total_signers, d.my_signed, d.is_sent);
+        if (d.waiting_for_other_signers)
+        {
+            statusClass = "queue-wait";
+            statusText = "Ожидаем других подписантов";
+        }
+
+        var authorLine = d.is_sent && !string.IsNullOrWhiteSpace(d.recipients_row_caption)
+            ? d.recipients_row_caption!
+            : d.initiator_name;
+
+        return new DocumentItem
+        {
+            Id = d.id,
+            Index = idx,
+            FileName = d.title,
+            Date = date,
+            Author = authorLine,
+            StatusText = statusText,
+            StatusClass = statusClass,
+            HasViewed = d.has_viewed,
+            HasChevron = true,
+            ReceivedAt = created,
+            SignProgress = d.signed_count,
+            SignTotal = d.total_signers,
+            IsSent = d.is_sent,
+            WaitingForOthers = d.waiting_for_other_signers,
+            RecipientsViewed = d.recipients_viewed,
+            RecipientsTotal = d.recipients_total,
+            RecipientsViewedNames = d.recipients_viewed_names ?? Array.Empty<string>(),
+            SuppressUnreadIndicator = suppressUnread,
+        };
+    }
+
+    private static (string statusClass, string statusText) MapStatus(string? status, int signed, int total, bool mySigned, bool isSent)
+    {
+        var st = (status ?? "").ToUpperInvariant();
+        if (st == "REJECTED") return ("rejected", "Отклонён");
+        if (st == "CANCELLED") return ("cancelled", "Отменён");
+        if (isSent) return ("sent", "Отправлен");
+        if (st == "SIGNED" || mySigned) return ("signed", "Подписан");
+        return st switch
+        {
+            "DRAFT" => ("unsigned", "Черновик"),
+            "IN_PROGRESS" => ("unsigned", "Не подписан"),
+            _ => ("unsigned", "Не подписан"),
+        };
+    }
+
+    private async Task SetTab(int tab)
+    {
+        if (activeTab == tab) return;
+        activeTab = tab;
+        await LoadDocumentsAsync();
+    }
+
+    private async Task SetArchiveView(bool archive)
+    {
+        if (showArchive == archive) return;
+        showArchive = archive;
+        await LoadDocumentsAsync();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString() ?? "";
+        await LoadDocumentsAsync();
+    }
+
+    private async Task OnSearchInDocumentTypesChange(ChangeEventArgs e)
+    {
+        searchInDocumentTypes = e.Value is bool b
+            ? b
+            : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        await LoadDocumentsAsync();
+    }
+
+    private enum HomeFilterPopover { None, Date, Sort, Category }
+
+    private enum HomeSortOption { NewestFirst, OldestFirst, SignedGroupFirst, UnsignedGroupFirst }
+
+    private enum HomeCategoryFilter
+    {
+        All,
+        UnsignedOnly,
+        SignedOnly,
+        SentOnly,
+        FullySignedOnly,
+        PartiallySignedOnly,
+        RejectedOnly,
+        CancelledOnly,
+    }
+
+    private class DocumentItem
+    {
+        public int Id { get; set; }
+        public int Index { get; set; }
+        public string FileName { get; set; } = "";
+        public string Date { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string StatusText { get; set; } = "";
+        public string StatusClass { get; set; } = "";
+        public bool HasViewed { get; set; }
+        public bool HasChevron { get; set; }
+        public DateTime ReceivedAt { get; set; }
+        public int SignProgress { get; set; }
+        public int SignTotal { get; set; }
+        public bool IsSent { get; set; }
+        public bool WaitingForOthers { get; set; }
+        public int RecipientsViewed { get; set; }
+        public int RecipientsTotal { get; set; }
+        public IReadOnlyList<string> RecipientsViewedNames { get; set; } = Array.Empty<string>();
+        public bool SuppressUnreadIndicator { get; set; }
+    }
+}

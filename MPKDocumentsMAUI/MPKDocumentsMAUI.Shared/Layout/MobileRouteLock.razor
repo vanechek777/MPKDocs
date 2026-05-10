@@ -1,0 +1,39 @@
+@inject NavigationManager Navigation
+@inject IMobileShellService MobileShell
+@implements IDisposable
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        TryRedirect(Navigation.Uri);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => TryRedirect(e.Location);
+
+    private void TryRedirect(string uri)
+    {
+        if (!MobileShell.IsSigningOnlyShell)
+            return;
+
+        string path;
+        try
+        {
+            path = new Uri(uri).AbsolutePath;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (MobileShell.IsPathAllowed(path))
+            return;
+
+        Navigation.NavigateTo("/signing", forceLoad: false, replace: true);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

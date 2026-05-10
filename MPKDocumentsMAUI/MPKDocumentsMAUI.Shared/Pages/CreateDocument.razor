@@ -1,0 +1,1591 @@
+@page "/create-document"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+@inject MPKDocumentsMAUI.Shared.Api.AuthApiClient AuthApi
+@using System.IO
+@using System.Security.Claims
+@using MPKDocumentsMAUI.Shared.Api
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject MPKDocumentsMAUI.Shared.Services.IDocumentFilePicker DocumentFilePicker
+@using MPKDocumentsMAUI.Shared.Services
+@using Microsoft.AspNetCore.Components.Routing
+@using System.Text.Json
+@using System.Globalization
+@inject IJSRuntime JS
+
+<PageTitle>Создание нового документа — МПК Документы</PageTitle>
+
+<div class="page-content">
+    <h1 class="page-title">@TitleText</h1>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <div style="margin: 8px 0 12px;color:var(--text-secondary)">@loadError</div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="mpk-page-loading"><LoadingSpinner Center /></div>
+    }
+    else
+    {
+
+    @* Step 0: Choose category *@
+    @if (currentStep == 0)
+    {
+        <p class="wizard-subtitle">Выберите категорию документа:</p>
+        <div class="category-grid">
+            @foreach (var c in Categories)
+            {
+                <div class="category-card @(selectedCategory == c ? "selected" : "")"
+                     @onclick="() => SelectCategoryAsync(c)">
+                    <div class="category-card-icon">
+                        <img src="icons/document.png" alt="" style="width:40px;height:48px;object-fit:contain;opacity:0.85" />
+                    </div>
+                    <div class="category-card-name">@c</div>
+                </div>
+            }
+        </div>
+    }
+
+    @* Step 1: Choose type in category *@
+    @if (currentStep == 1)
+    {
+        <div class="wizard-subtitle" style="margin-top:0">Категория: @selectedCategory</div>
+        <div style="margin-bottom: 12px;">
+            <button type="button" class="btn btn-secondary btn-sm" @onclick="GoPickCategory">
+                Сменить категорию
+            </button>
+        </div>
+        <p class="wizard-subtitle" style="margin-top:-6px">Выберите тип документа:</p>
+        <div class="category-grid">
+            @foreach (var t in TemplatesInCategory)
+            {
+                <div class="category-card @(selectedTemplateId == t.Id ? "selected" : "")"
+                     @onclick="() => SelectTemplate(t.Id)">
+                    <div class="category-card-icon">
+                        <img src="icons/document.png" alt="" style="width:40px;height:48px;object-fit:contain;opacity:0.85" />
+                    </div>
+                    <div class="category-card-name">@t.Name</div>
+                </div>
+            }
+        </div>
+    }
+
+    @* Step 2: Upload file *@
+    @if (currentStep == 2)
+    {
+        <div class="wizard-subtitle" style="margin-top:0">@selectedCategory | @SelectedTemplateName</div>
+        <div style="margin-bottom: 12px;">
+            <button type="button" class="btn btn-secondary btn-sm" @onclick="GoPickType">
+                Сменить тип
+            </button>
+        </div>
+        <div class="category-grid" style="grid-template-columns: 1fr; width: 100%; max-width: 100%;">
+            <div @ref="_dropZoneRef"
+                 class="category-card mpk-file-drop @(_dragOverFile ? "mpk-file-drop--over" : null)"
+                 style="width:100%;max-width:none;min-height: calc(100vh - 260px);border-style:dashed;border-width:2px;opacity:0.95;justify-content:center"
+                 @ondragenter="OnFileDragEnter"
+                 @ondragenter:preventDefault
+                 @ondragleave="OnFileDragLeave"
+                 @ondragover:preventDefault
+                 @ondragover="OnFileDragOver">
+                <div class="category-card-icon" style="margin-top:0">
+                    <img src="icons/document.png" alt="" style="width:64px;height:64px;object-fit:contain;opacity:0.7" />
+                </div>
+                <div class="category-card-name" style="margin-top:14px">Загрузить файл</div>
+                <div style="margin-top:8px;color:var(--text-secondary);font-size:12px;line-height:1.3;text-align:center;max-width:320px">
+                    Загрузить файл с компьютера.<br />Выберите файл документа с расширением .doc, .docx или .pdf.<br />
+                    Можно перетащить файл в эту область.
+                </div>
+                <div style="margin-top:14px">
+                    @if (DocumentFilePicker.SupportsNativePick)
+                    {
+                        <button type="button" class="btn btn-secondary mpk-inputfile" @onclick="PickDocumentNativeAsync">
+                            Выбрать файл…
+                        </button>
+                    }
+                    else
+                    {
+                        <InputFile class="mpk-inputfile" OnChange="OnFileSelected" accept=".pdf,.doc,.docx" />
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(PickedFileName))
+                {
+                    <div style="margin-top:10px;color:var(--text-secondary);font-size:12px">
+                        @PickedFileName (@PickedFileSizeText)
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* Step 3: Sending (like slide 2) *@
+    @if (currentStep == 3)
+    {
+        <p class="wizard-subtitle">@SelectedTemplateName</p>
+        <div class="wizard-form">
+            @if (schemaFields.Count > 0)
+            {
+                <div class="form-group">
+                    <label class="form-label">Параметры документа</label>
+                    <div style="margin-top:8px;color:var(--text-tertiary);font-size:12px">
+                        Заполни данные по выбранному типу документа.
+                    </div>
+                </div>
+
+                @foreach (var f in schemaFields)
+                {
+                    @* Чтобы не было двух "названий": title/fileName берём из общего поля ниже *@
+                    if (string.Equals(f.Name, "title", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(f.Name, "fileName", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    <div class="form-group" style="margin-top: 12px;">
+                        <label class="form-label">@GetUiLabel(f)@(f.Required ? " *" : "")</label>
+
+                        @if (f.Type == "select" && f.Options is not null && f.Options.Count > 0)
+                        {
+                            @if (f.Options.Count >= 3)
+                            {
+                                <div class="category-grid" style="margin-top:8px;grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
+                                    @foreach (var opt in f.Options)
+                                    {
+                                        <div class="category-card @(GetFieldValue(f.Name) == opt ? "selected" : "")"
+                                             style="padding:14px 12px;gap:10px;min-height:96px"
+                                             @onclick="() => SetFieldValue(f.Name, opt)">
+                                            <div class="category-card-icon" style="width:40px;height:40px;opacity:0.9">
+                                                <img src="icons/document.png" alt="" style="width:32px;height:32px;object-fit:contain;opacity:0.85" />
+                                            </div>
+                                            <div class="category-card-name" style="font-size:12px;line-height:1.2">@opt</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <select class="form-input" style="margin-top:8px"
+                                        value="@GetFieldValue(f.Name)"
+                                        @onchange="(e) => OnFieldInput(e, f.Name)">
+                                    <option value="">Выберите...</option>
+                                    @foreach (var opt in f.Options)
+                                    {
+                                        <option value="@opt">@opt</option>
+                                    }
+                                </select>
+                            }
+                        }
+                        else if (f.Type == "date")
+                        {
+                            <input class="form-input" type="date" style="margin-top:8px"
+                                   value="@GetFieldValue(f.Name)"
+                                   @oninput="(e) => OnFieldInput(e, f.Name)" />
+                        }
+                        else if (f.Type == "number")
+                        {
+                            <input class="form-input" type="number" style="margin-top:8px"
+                                   placeholder="@f.Placeholder"
+                                   value="@GetFieldValue(f.Name)"
+                                   @oninput="(e) => OnFieldInput(e, f.Name)" />
+                        }
+                        else if (f.Multiline || f.Type == "textarea")
+                        {
+                            <textarea class="form-input" style="margin-top:8px;min-height:92px"
+                                      placeholder="@f.Placeholder"
+                                      @oninput="(e) => OnFieldInput(e, f.Name)">@GetFieldValue(f.Name)</textarea>
+                        }
+                        else
+                        {
+                            <input class="form-input" type="text" style="margin-top:8px"
+                                   placeholder="@f.Placeholder"
+                                   value="@GetFieldValue(f.Name)"
+                                   @oninput="(e) => OnFieldInput(e, f.Name)" />
+                        }
+                    </div>
+                }
+            }
+
+            <div class="form-group">
+                <label class="form-label">Укажите название документа:</label>
+                <input class="form-input" type="text" placeholder="Например: Отчет_по_продажам.docx" @bind="fileName" />
+                @if (!string.IsNullOrWhiteSpace(PickedFileName))
+                {
+                    <div style="margin-top:8px;color:var(--text-tertiary);font-size:12px">
+                        Выбран файл: @PickedFileName (@PickedFileSizeText)
+                    </div>
+                }
+            </div>
+
+            <div class="form-group" style="margin-top: 12px;">
+                <div class="form-label" style="margin-bottom:8px">Личная подпись:</div>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:13px">
+                    <input type="radio" name="personalSign" checked="@requiresPersonalSign" @onchange="() => requiresPersonalSign = true" />
+                    Требуется
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:13px;margin-top:6px">
+                    <input type="radio" name="personalSign" checked="@(!requiresPersonalSign)" @onchange="() => requiresPersonalSign = false" />
+                    Не требуется
+                </label>
+            </div>
+
+            <div class="form-group" style="margin-top: 12px;">
+                <div class="form-label" style="margin-bottom:8px">Документ назначен:</div>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:13px">
+                    <input type="radio" name="assignMode" checked="@(assignMode==AssignMode.Users)" @onchange="() => SetAssignMode(AssignMode.Users)" />
+                    Одному человеку / группе людей
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:13px;margin-top:6px">
+                    <input type="radio" name="assignMode" checked="@(assignMode==AssignMode.Department)" @onchange="() => SetAssignMode(AssignMode.Department)" />
+                    Отделу
+                </label>
+            </div>
+
+            @if (assignMode == AssignMode.Users)
+            {
+                <div class="form-group" style="margin-top: 12px;">
+                    <label class="form-label">Укажите подписанта:</label>
+                    <div class="signers-search" style="margin-top: 8px;">
+                        <input type="text" placeholder="Поиск сотрудника..." @bind="signerSearch" @bind:event="oninput" />
+                    </div>
+                    @foreach (var s in GetFilteredSigners())
+                    {
+                        <div class="signer-option @(selectedSigners.Contains(s.Id) ? "selected" : "")"
+                             style="margin-top: 10px;"
+                             @onclick="() => ToggleSigner(s.Id)">
+                            <div class="signer-avatar">@s.Initials</div>
+                            <div class="signer-details">
+                                <div class="signer-details-name">@s.FullName</div>
+                                <div class="signer-details-dept">@s.Department</div>
+                            </div>
+                            <div class="signer-check"></div>
+                        </div>
+                    }
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Выбраны:</label>
+                    <div class="detail-info-block" style="padding: 10px 12px;">
+                        @foreach (var s in SelectedSignerLabels)
+                        {
+                            <div style="color:var(--text-secondary);font-size:13px;line-height:1.6">@s</div>
+                        }
+                        @if (SelectedSignerLabels.Count == 0)
+                        {
+                            <div style="color:var(--text-secondary);font-size:13px">—</div>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="form-group" style="margin-top: 12px;">
+                    <label class="form-label">Укажите подписанта:</label>
+                    <select class="form-input" style="margin-top:8px" @bind="selectedDepartmentId">
+                        <option value="">Выберите отдел...</option>
+                        @foreach (var d in departments)
+                        {
+                            <option value="@d.Id">@d.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            <div class="wizard-actions">
+                <button class="btn btn-maroon" @onclick="GoConfirm">Далее</button>
+            </div>
+        </div>
+    }
+
+    @* Step 4: Confirm (like slide 3) *@
+    @if (currentStep == 4)
+    {
+        <p class="wizard-subtitle">@SelectedTemplateName | Подтверждение данных</p>
+        <div class="confirm-shell">
+            <div class="confirm-card">
+                <div class="confirm-header">
+                    <div class="confirm-title">Проверь данные перед отправкой</div>
+                    <div class="confirm-sub">@SelectedTemplateName</div>
+                </div>
+
+                <div class="confirm-grid">
+                    <section class="confirm-section">
+                        <div class="confirm-section-title">
+                            <img src="icons/document.png" alt="" class="confirm-ico" />
+                            Файл
+                        </div>
+                        <div class="confirm-row">
+                            <div class="confirm-label">Название</div>
+                            <div class="confirm-value">@fileName</div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(PickedFileName))
+                        {
+                            <div class="confirm-row" style="margin-top:8px">
+                                <div class="confirm-label">Размер</div>
+                                <div class="confirm-value">@PickedFileSizeText</div>
+                            </div>
+                            <div class="confirm-row" style="margin-top:6px">
+                                <div class="confirm-label">Расширение</div>
+                                <div class="confirm-value">@PickedFileExt</div>
+                            </div>
+                        }
+                    </section>
+
+                    <section class="confirm-section">
+                        <div class="confirm-section-title">
+                            <img src="icons/signing.png" alt="" class="confirm-ico" />
+                            Настройки
+                        </div>
+
+                        <div class="confirm-chips">
+                            <span class="confirm-chip @(requiresPersonalSign ? "on" : "off")">
+                                Личная подпись: @(requiresPersonalSign ? "Требуется" : "Не требуется")
+                            </span>
+                            <span class="confirm-chip on">
+                                Назначение: @(assignMode == AssignMode.Department ? "Отдел" : "Группа людей")
+                            </span>
+                        </div>
+                    </section>
+
+                    <section class="confirm-section confirm-section--wide">
+                        <div class="confirm-section-title">
+                            <img src="icons/profile.png" alt="" class="confirm-ico" />
+                            Подписанты
+                        </div>
+
+                        <div class="confirm-list">
+                            @foreach (var s in ConfirmSignersList)
+                            {
+                                <div class="confirm-list-item">@s</div>
+                            }
+                            @if (ConfirmSignersList.Count == 0)
+                            {
+                                <div class="confirm-list-empty">—</div>
+                            }
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="confirm-actions">
+                <button class="btn btn-green" disabled="@isSaving" @onclick="SubmitDocument">
+                    @if (isSaving)
+                    {
+                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Отправляем…</span></span>
+                    }
+                    else
+                    {
+                        <span>Отправить</span>
+                    }
+                </button>
+                <button class="btn btn-secondary" disabled="@isSaving" @onclick="() => currentStep = 3">Изменить</button>
+                <button class="btn btn-red" disabled="@isSaving" @onclick="CancelAndExit">Отменить</button>
+            </div>
+        </div>
+    }
+    }
+</div>
+
+@if (showLeaveDraftModal)
+{
+    <div class="modal-overlay" @onclick="StayOnLeaveDraftDialog">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <div class="modal-header">Сохранить черновик?</div>
+            <div class="modal-body" style="text-align:center;color:var(--text-secondary);font-size:var(--font-size-sm);line-height:1.5">
+                @if (selectedTemplateId is not null)
+                {
+                    <span>Текущий прогресс мастера будет сохранён на сервере как черновик (включая шаг).</span>
+                }
+                else
+                {
+                    <span>Будет сохранена только выбранная категория на этом устройстве — тип документа ещё не выбран.</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(leaveModalError))
+                {
+                    <div style="margin-top:12px;color:#f0a0a0">@leaveModalError</div>
+                }
+            </div>
+            <div class="modal-footer" style="flex-wrap:wrap">
+                <button type="button" class="btn btn-secondary" disabled="@leaveChoiceBusy" @onclick="StayOnLeaveDraftDialog">Остаться</button>
+                <button type="button" class="btn btn-red" disabled="@leaveChoiceBusy" @onclick="DiscardAndLeaveWizardAsync">Не сохранять</button>
+                <button type="button" class="btn btn-green" disabled="@leaveChoiceBusy" @onclick="SaveAndLeaveWizardAsync">Сохранить</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Back button *@
+<button class="wizard-back" @onclick="GoBack">
+    <img src="icons/full_arrow_left.png" alt="" style="width:20px;height:20px;opacity:1.0;filter:brightness(0) invert(1)" />
+</button>
+
+<OtpConfirmModal IsVisible="showOtp"
+                 DocumentName="@fileName"
+                 PhoneHint="@otpPhoneHint"
+                 OnClose="CloseOtp"
+                 OnConfirm="OnOtpConfirmCreate" />
+
+@code {
+    private int currentStep = 0;
+    private bool isLoading;
+    private bool isSaving;
+    private string? loadError;
+    private bool showOtp;
+    private string otpPhoneHint = "";
+    private string? otpCode;
+    private int? _draftDocumentId;
+    private bool _suppressDraftSave;
+    private bool _resumeInProgress;
+    private bool _draftSaveInFlight;
+    private IDisposable? _locationChangingRegistration;
+    private int? _pendingResumeDraftId;
+    private const string PrecatStorageKey = "mpk.createWizard.precat.v1";
+
+    private bool showLeaveDraftModal;
+    private string? _leaveNavigationTarget;
+    private bool leaveChoiceBusy;
+    private string? leaveModalError;
+
+    private int? meId;
+    private string? meName;
+    private string? meDept;
+
+    private string? selectedCategory;
+    private int? selectedTemplateId;
+    private string fileName = "";
+    private DateTime docDate = DateTime.Now;
+    private string docNote = "";
+    private string signerSearch = "";
+    private HashSet<int> selectedSigners = new();
+
+    private bool requiresPersonalSign = true;
+    private AssignMode assignMode = AssignMode.Users;
+    private int? selectedDepartmentId;
+
+    private record TemplateOption(int Id, string Name, string? Category);
+    private List<TemplateOption> templates = new();
+
+    private record SchemaField(string Name, string Label, string Type, bool Required, List<string>? Options, string? Placeholder, bool Multiline);
+    private List<SchemaField> schemaFields = new();
+    private Dictionary<string, object?> content = new();
+
+    private ElementReference _dropZoneRef;
+    private IJSObjectReference? _dropModule;
+    private IJSObjectReference? _dropDisposeHandle;
+    private DotNetObjectReference<CreateDocument>? _dotNetRef;
+    private bool _fileDropSessionAttached;
+    private int _dragDepth;
+    private bool _dragOverFile;
+    private Action<string, long>? _registeredHostDrop;
+
+    private record SignerOption(int Id, string FullName, string Department, string Initials);
+    private List<SignerOption> allSigners = new();
+    private record DepartmentOption(int Id, string Name);
+    private List<DepartmentOption> departments = new();
+
+    private enum AssignMode { Users, Department }
+
+    private string TitleText => currentStep switch
+    {
+        0 => "Создание нового документа",
+        1 => "Создание нового документа",
+        2 => "Создание нового документа",
+        _ => "Отправка документа",
+    };
+
+    private string SelectedTemplateName => templates.FirstOrDefault(x => x.Id == selectedTemplateId)?.Name ?? "Документ";
+
+    private List<string> Categories => templates
+        .Select(t => t.Category)
+        .Where(c => !string.IsNullOrWhiteSpace(c))
+        .Select(c => c!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(x => x)
+        .ToList();
+
+    private List<TemplateOption> TemplatesInCategory => templates
+        .Where(t => !string.IsNullOrWhiteSpace(selectedCategory) &&
+                    string.Equals(t.Category, selectedCategory, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private List<string> SelectedSignerLabels => selectedSigners
+        .Select(id => allSigners.FirstOrDefault(s => s.Id == id))
+        .Where(s => s is not null)
+        .Select(s => $"{s!.FullName} ({s.Department})")
+        .ToList();
+
+    private List<string> ConfirmSignersList
+    {
+        get
+        {
+            var list = new List<string>();
+            if (meId is not null)
+                list.Add($"{(meName ?? "Вы")} ({(meDept ?? "—")}) — Создатель");
+
+            if (assignMode == AssignMode.Department)
+            {
+                list.Add($"Отдел: {departments.FirstOrDefault(d => d.Id == selectedDepartmentId)?.Name ?? "—"}");
+                return list;
+            }
+
+            list.AddRange(SelectedSignerLabels);
+            return list;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _pendingResumeDraftId = TryParseDraftIdFromUri(Navigation.Uri);
+        try
+        {
+            var st = await AuthStateProvider.GetAuthenticationStateAsync();
+            var u = st.User;
+            var idStr = u.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(idStr, out var id))
+                meId = id;
+            meName = u.Identity?.Name;
+        }
+        catch
+        {
+            // ignore
+        }
+        try
+        {
+            var me = await AuthApi.MeAsync();
+            otpPhoneHint = PhoneDisplay.MaskRu(me.phone_number);
+        }
+        catch
+        {
+            otpPhoneHint = "";
+        }
+        await LoadAsync();
+        await TryRestorePrecategoryFromStorageAsync();
+        if (_pendingResumeDraftId is int resumeId)
+            await ResumeDraftFromServerAsync(resumeId);
+
+        _locationChangingRegistration?.Dispose();
+        _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChangingAsync);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (currentStep == 2)
+        {
+            _registeredHostDrop ??= OnHostFileFromNative;
+            HostFileDropHub.Callback = _registeredHostDrop;
+            if (!_fileDropSessionAttached)
+            {
+                await EnsureFileDropAsync();
+                _fileDropSessionAttached = true;
+            }
+        }
+        else
+        {
+            ClearHostFileDropCallback();
+            if (_fileDropSessionAttached)
+            {
+                await TeardownFileDropAsync();
+                _fileDropSessionAttached = false;
+            }
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var t = await DocsApi.ListTemplatesAsync(activeOnly: true);
+            templates = t.Select(x => new TemplateOption(x.id, x.name, x.category ?? InferCategoryFromName(x.name))).ToList();
+
+            var u = await DocsApi.ListUsersAsync(activeOnly: true);
+            allSigners = u
+                .Where(x => meId is null || x.id != meId.Value) // нельзя отправлять самому себе на подпись
+                .Select(x => new SignerOption(
+                    x.id,
+                    x.full_name,
+                    x.department ?? "—",
+                    BuildInitials(x.full_name)))
+                .ToList();
+            if (meId is not null)
+            {
+                // "me" мы убрали из allSigners, поэтому ищем по исходному списку u
+                var me = u.FirstOrDefault(x => x.id == meId.Value);
+                if (me is not null)
+                {
+                    meName = me.full_name;
+                    meDept = me.department ?? "—";
+                }
+            }
+
+            var deps = await DocsApi.ListDepartmentsAsync(activeOnly: true);
+            departments = deps.Select(d => new DepartmentOption(d.id, d.name)).ToList();
+        }
+        catch
+        {
+            loadError = "Не удалось загрузить шаблоны/пользователей. Проверь, что API запущено.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void FillSchemaFieldsFromFormSchema(TemplateDetailDto detail)
+    {
+        schemaFields = new();
+        if (detail.form_schema.TryGetValue("fields", out var fieldsObj) && fieldsObj is JsonElement je && je.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in je.EnumerateArray())
+            {
+                var name = el.TryGetProperty("name", out var n) ? n.GetString() : null;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var label = el.TryGetProperty("label", out var l) ? (l.GetString() ?? name) : name;
+                var type = el.TryGetProperty("type", out var t) ? (t.GetString() ?? "string") : "string";
+                var required = el.TryGetProperty("required", out var r) && r.ValueKind == JsonValueKind.True;
+                var placeholder = el.TryGetProperty("placeholder", out var p) ? p.GetString() : null;
+                var multiline = el.TryGetProperty("multiline", out var ml) && ml.ValueKind == JsonValueKind.True;
+
+                List<string>? options = null;
+                if (el.TryGetProperty("options", out var opt) && opt.ValueKind == JsonValueKind.Array)
+                {
+                    options = opt.EnumerateArray()
+                        .Where(x => x.ValueKind == JsonValueKind.String)
+                        .Select(x => x.GetString() ?? "")
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .ToList();
+                    if (options.Count == 0) options = null;
+                }
+
+                schemaFields.Add(new SchemaField(name!, label!, type, required, options, placeholder, multiline));
+            }
+        }
+    }
+
+    private async Task SelectTemplate(int id)
+    {
+        if (!_resumeInProgress && selectedTemplateId is int prevTpl && prevTpl != id)
+            _draftDocumentId = null;
+
+        selectedTemplateId = id;
+        schemaFields = new();
+        content = new();
+        PickedFileName = null;
+        PickedFileSizeBytes = null;
+        _pickedFileBytes = null;
+        fileName = "";
+        signerSearch = "";
+        selectedSigners.Clear();
+        selectedDepartmentId = null;
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var detail = await DocsApi.GetTemplateAsync(id);
+            FillSchemaFieldsFromFormSchema(detail);
+            currentStep = 2;
+            await ClearPrecategoryStorageAsync();
+        }
+        catch
+        {
+            loadError = "Не удалось загрузить тип документа.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private List<SignerOption> GetFilteredSigners()
+    {
+        if (string.IsNullOrWhiteSpace(signerSearch)) return allSigners;
+        return allSigners.Where(s => s.FullName.Contains(signerSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private void ToggleSigner(int id)
+    {
+        if (meId is not null && id == meId.Value) return;
+        if (!selectedSigners.Remove(id)) selectedSigners.Add(id);
+    }
+
+    private void GoBack()
+    {
+        if (currentStep == 0)
+        {
+            Navigation.NavigateTo("/signing");
+            return;
+        }
+        if (currentStep == 1)
+        {
+            currentStep = 0;
+            return;
+        }
+        if (currentStep > 0) currentStep--;
+    }
+
+    private void GoPickTemplate()
+    {
+        currentStep = 0;
+        loadError = null;
+    }
+
+    private async Task SelectCategoryAsync(string cat)
+    {
+        _draftDocumentId = null;
+        selectedCategory = cat;
+        selectedTemplateId = null;
+        schemaFields = new();
+        content = new();
+        PickedFileName = null;
+        PickedFileSizeBytes = null;
+        _pickedFileBytes = null;
+        fileName = "";
+        signerSearch = "";
+        selectedSigners.Clear();
+        selectedDepartmentId = null;
+        // Если у категории только один тип — пропускаем шаг выбора типа
+        var single = templates
+            .Where(t => !string.IsNullOrWhiteSpace(t.Category) &&
+                        string.Equals(t.Category, cat, StringComparison.OrdinalIgnoreCase))
+            .Select(t => (int?)t.Id)
+            .FirstOrDefault();
+        var count = templates.Count(t => !string.IsNullOrWhiteSpace(t.Category) &&
+                                         string.Equals(t.Category, cat, StringComparison.OrdinalIgnoreCase));
+
+        if (count == 1 && single is not null)
+        {
+            await SelectTemplate(single.Value);
+            return;
+        }
+
+        currentStep = 1;
+        loadError = null;
+    }
+
+    private void GoPickCategory()
+    {
+        _draftDocumentId = null;
+        currentStep = 0;
+        selectedCategory = null;
+        selectedTemplateId = null;
+        loadError = null;
+    }
+
+    private void GoPickType()
+    {
+        _draftDocumentId = null;
+        currentStep = 1;
+        selectedTemplateId = null;
+        schemaFields = new();
+        content = new();
+        PickedFileName = null;
+        PickedFileSizeBytes = null;
+        _pickedFileBytes = null;
+        fileName = "";
+        loadError = null;
+    }
+
+    private void CancelAndExit() => Navigation.NavigateTo("/signing", replace: true);
+
+    private void SetAssignMode(AssignMode m)
+    {
+        assignMode = m;
+        if (m == AssignMode.Department)
+        {
+            selectedSigners.Clear();
+        }
+        else
+        {
+            selectedDepartmentId = null;
+        }
+        if (meId is not null)
+            selectedSigners.Remove(meId.Value);
+    }
+
+    private void GoConfirm()
+    {
+        loadError = null;
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            loadError = "Укажи название документа (имя файла).";
+            return;
+        }
+        if (assignMode == AssignMode.Users && selectedSigners.Count == 0)
+        {
+            loadError = "Укажи хотя бы одного подписанта.";
+            return;
+        }
+        if (assignMode == AssignMode.Department && selectedDepartmentId is null)
+        {
+            loadError = "Выбери отдел.";
+            return;
+        }
+        currentStep = 4;
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var f = e.File;
+        if (f is null) return;
+        await using var stream = f.OpenReadStream(MaxUploadBytes);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        _pickedFileBytes = ms.ToArray();
+        await ApplyPickedFileAsync(f.Name, f.Size);
+    }
+
+    private async Task PickDocumentNativeAsync()
+    {
+        var info = await DocumentFilePicker.PickDocumentAsync();
+        if (info is null)
+        {
+            _pickedFileBytes = null;
+            return;
+        }
+
+        await ApplyPickedFileAsync(info.FileName, info.SizeBytes);
+        _pickedFileBytes = await DocumentFilePicker.TryReadLastNativePickAsync(MaxUploadBytes);
+    }
+
+    private async Task ApplyPickedFileAsync(string name, long sizeBytes)
+    {
+        PickedFileName = name;
+        PickedFileSizeBytes = sizeBytes;
+        fileName = name;
+        loadError = null;
+        currentStep = 3;
+        _dragDepth = 0;
+        _dragOverFile = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnHostFileFromNative(string pathOrName, long size)
+    {
+        var trimmed = pathOrName.Trim();
+        var name = Path.GetFileName(trimmed.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var ext = (Path.GetExtension(name) ?? "").ToLowerInvariant();
+        if (ext is not ".pdf" and not ".doc" and not ".docx") return;
+        _ = InvokeAsync(async () =>
+        {
+            _pickedFileBytes = null;
+            await ApplyPickedFileAsync(name, size);
+        });
+    }
+
+    private void ClearHostFileDropCallback()
+    {
+        if (HostFileDropHub.Callback == _registeredHostDrop)
+            HostFileDropHub.Callback = null;
+        _registeredHostDrop = null;
+    }
+
+    private Task OnFileDragOver(DragEventArgs _) => Task.CompletedTask;
+
+    private Task OnFileDragEnter(DragEventArgs _)
+    {
+        _dragDepth++;
+        _dragOverFile = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnFileDragLeave(DragEventArgs _)
+    {
+        _dragDepth--;
+        if (_dragDepth < 0) _dragDepth = 0;
+        _dragOverFile = _dragDepth > 0;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task NotifyDroppedFile(string name, double size)
+    {
+        var sz = (long)(size >= long.MaxValue ? long.MaxValue : size);
+        return InvokeAsync(() =>
+        {
+            _pickedFileBytes = null;
+            PickedFileName = name;
+            PickedFileSizeBytes = sz;
+            fileName = name;
+            loadError = null;
+            currentStep = 3;
+            _dragDepth = 0;
+            _dragOverFile = false;
+            StateHasChanged();
+        });
+    }
+
+    private async Task EnsureFileDropAsync()
+    {
+        try
+        {
+            await TeardownFileDropAsync();
+            // Не использовать "./_content/..." — на маршрутах вроде /create-document это даёт неверный путь
+            // (/create-document/_content/...) и динамический import падает молча.
+            var moduleUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-fileDrop.js").ToString();
+            _dropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", moduleUrl);
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            _dropDisposeHandle = await _dropModule.InvokeAsync<IJSObjectReference>("initFileDrop", _dotNetRef, _dropZoneRef);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private async Task TeardownFileDropAsync()
+    {
+        // Снимаем поле сразу, иначе при параллельном вызове (OnAfterRender + DisposeAsync)
+        // после первого await второй поток видит null — NullReferenceException на DisposeAsync.
+        var handle = Interlocked.Exchange(ref _dropDisposeHandle, null);
+        if (handle is null)
+            return;
+        try
+        {
+            await handle.InvokeVoidAsync("dispose");
+        }
+        catch
+        {
+            // ignored
+        }
+
+        try
+        {
+            await handle.DisposeAsync();
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        _locationChangingRegistration?.Dispose();
+        _locationChangingRegistration = null;
+        ClearHostFileDropCallback();
+        await TeardownFileDropAsync();
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
+        if (_dropModule is not null)
+        {
+            try
+            {
+                await _dropModule.DisposeAsync();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            _dropModule = null;
+        }
+    }
+
+    private string? PickedFileName { get; set; }
+    private long? PickedFileSizeBytes { get; set; }
+    private string PickedFileSizeText => PickedFileSizeBytes is null ? "—" : FormatBytes(PickedFileSizeBytes.Value);
+    private string? PickedFileExt => string.IsNullOrWhiteSpace(PickedFileName) ? null : Path.GetExtension(PickedFileName);
+
+    private const int MaxUploadBytes = 25 * 1024 * 1024;
+    private byte[]? _pickedFileBytes;
+
+    private static string GuessMimeForFilename(string name)
+    {
+        return (Path.GetExtension(name) ?? "").ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            _ => "application/octet-stream",
+        };
+    }
+
+    private async Task UploadAttachmentIfNeededAsync(int documentId)
+    {
+        if (_pickedFileBytes is not { Length: > 0 }) return;
+        if (string.IsNullOrWhiteSpace(fileName)) return;
+        await using var ms = new MemoryStream(_pickedFileBytes);
+        await DocsApi.UploadDocumentFileAsync(documentId, ms, fileName, GuessMimeForFilename(fileName));
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double size = bytes;
+        var unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+        return unit switch
+        {
+            0 => $"{bytes} {units[unit]}",
+            _ => $"{size:0.##} {units[unit]}",
+        };
+    }
+
+    private string GetFieldValue(string name) => content.TryGetValue(name, out var v) ? (v?.ToString() ?? "") : "";
+    private void SetFieldValue(string name, string value) => content[name] = value;
+    private void OnFieldInput(ChangeEventArgs e, string name) => SetFieldValue(name, e.Value?.ToString() ?? "");
+
+    private static string? InferCategoryFromName(string? templateName)
+    {
+        if (string.IsNullOrWhiteSpace(templateName)) return null;
+        var n = templateName.Trim();
+        if (n.StartsWith("Отчет", StringComparison.OrdinalIgnoreCase)) return "Отчет";
+        if (n.StartsWith("Приказ", StringComparison.OrdinalIgnoreCase)) return "Приказ";
+        return null;
+    }
+
+    private static string HumanizeFieldName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "Поле";
+        // docNumber -> Doc Number, report_type -> Report Type
+        var s = name.Replace("_", " ").Trim();
+        var chars = new List<char>(s.Length + 8);
+        for (var i = 0; i < s.Length; i++)
+        {
+            var c = s[i];
+            if (i > 0 && char.IsUpper(c) && char.IsLetterOrDigit(s[i - 1]) && !char.IsWhiteSpace(s[i - 1]))
+                chars.Add(' ');
+            chars.Add(c);
+        }
+        var r = new string(chars.ToArray()).Trim();
+        return char.ToUpperInvariant(r[0]) + r[1..];
+    }
+
+    private static string GetUiLabel(SchemaField f)
+    {
+        // Если backend не дал label — делаем человекочитаемо + небольшой словарь
+        var label = string.IsNullOrWhiteSpace(f.Label) || f.Label == f.Name ? HumanizeFieldName(f.Name) : f.Label;
+        return f.Name switch
+        {
+            "docNumber" or "documentNumber" => "Номер документа",
+            "reportType" or "report_kind" or "reportKind" => "Тип отчёта",
+            "title" => "Название",
+            _ => label,
+        };
+    }
+
+    private static string BuildInitials(string fullName)
+    {
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "—";
+        var a = parts[0].Length > 0 ? parts[0][0].ToString() : "";
+        var b = parts.Length > 1 && parts[1].Length > 0 ? parts[1][0].ToString() : "";
+        return (a + b).ToUpperInvariant();
+    }
+
+    private Dictionary<string, object?> BuildContent()
+    {
+        var c = new Dictionary<string, object?>(content);
+        if (!string.IsNullOrWhiteSpace(fileName)) c["fileName"] = fileName.Trim();
+        // если у типа документа есть поле title — заполняем его тем же значением
+        if (!string.IsNullOrWhiteSpace(fileName) &&
+            schemaFields.Any(x => string.Equals(x.Name, "title", StringComparison.OrdinalIgnoreCase)) &&
+            !c.ContainsKey("title"))
+        {
+            c["title"] = fileName.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(PickedFileExt)) c["fileExt"] = PickedFileExt;
+        if (PickedFileSizeBytes is not null) c["fileSize"] = PickedFileSizeBytes.Value;
+        c["docDate"] = docDate.ToString("yyyy-MM-dd");
+        if (!string.IsNullOrWhiteSpace(docNote)) c["note"] = docNote.Trim();
+        c["requiresPersonalSign"] = requiresPersonalSign;
+        c["assignMode"] = assignMode == AssignMode.Department ? "department" : "users";
+        if (assignMode == AssignMode.Department && selectedDepartmentId is int depId)
+            c["signerDepartmentId"] = depId;
+        if (!string.IsNullOrWhiteSpace(otpCode)) c["otpCode"] = otpCode;
+        return c;
+    }
+
+    private async Task SaveDraft()
+    {
+        if (selectedTemplateId is null) return;
+        if (isSaving) return;
+        isSaving = true;
+        loadError = null;
+        try
+        {
+            var payload = BuildDraftContentForApi();
+            int docId;
+            if (_draftDocumentId is int existingId)
+            {
+                await DocsApi.UpdateDraftContentAsync(existingId, payload);
+                docId = existingId;
+            }
+            else
+            {
+                var res = await DocsApi.CreateDocumentAsync(
+                    selectedTemplateId.Value,
+                    payload,
+                    selectedSigners.ToList(),
+                    signerDepartmentId: assignMode == AssignMode.Department ? selectedDepartmentId : null,
+                    saveAsDraft: true);
+                docId = res.document_id;
+                _draftDocumentId = docId;
+            }
+
+            await UploadAttachmentIfNeededAsync(docId);
+            await ClearPrecategoryStorageAsync();
+            _suppressDraftSave = true;
+            Navigation.NavigateTo($"/document/{docId}?from=create", replace: true);
+        }
+        catch
+        {
+            loadError = "Не удалось сохранить черновик.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task SubmitDocument()
+    {
+        loadError = null;
+        if (selectedTemplateId is null) { loadError = "Не выбран тип документа."; return; }
+        if (string.IsNullOrWhiteSpace(fileName)) { loadError = "Укажи название документа (имя файла)."; return; }
+        if (assignMode == AssignMode.Users && selectedSigners.Count == 0) { loadError = "Укажи хотя бы одного подписанта."; return; }
+        if (assignMode == AssignMode.Department && selectedDepartmentId is null) { loadError = "Выбери отдел."; return; }
+        if (requiresPersonalSign && string.IsNullOrWhiteSpace(otpCode))
+        {
+            try
+            {
+                await AuthApi.SendOtpAsync();
+            }
+            catch (Exception ex)
+            {
+                loadError = $"Не удалось отправить SMS с кодом: {ex.Message}";
+                return;
+            }
+            showOtp = true;
+            return;
+        }
+        if (isSaving) return;
+        isSaving = true;
+        try
+        {
+            var signerIds = selectedSigners.ToList();
+            if (requiresPersonalSign && meId is not null && !signerIds.Contains(meId.Value))
+                signerIds.Insert(0, meId.Value);
+            var res = await DocsApi.CreateDocumentAsync(
+                selectedTemplateId.Value,
+                BuildContent(),
+                signerIds,
+                signerDepartmentId: assignMode == AssignMode.Department ? selectedDepartmentId : null,
+                saveAsDraft: false);
+            await UploadAttachmentIfNeededAsync(res.document_id);
+            _suppressDraftSave = true;
+            Navigation.NavigateTo($"/document/{res.document_id}?from=create", replace: true);
+        }
+        catch (Exception ex)
+        {
+            loadError = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Не удалось отправить документ. Проверь, что API запущено."
+                : $"Не удалось отправить документ: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private Task CloseOtp()
+    {
+        showOtp = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnOtpConfirmCreate(string code)
+    {
+        otpCode = code;
+        showOtp = false;
+        await InvokeAsync(StateHasChanged);
+        await SubmitDocument();
+    }
+
+    private static int? TryParseDraftIdFromUri(string? uri)
+    {
+        if (string.IsNullOrEmpty(uri)) return null;
+        var idx = uri.IndexOf("draft=", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+        var start = idx + 6;
+        var end = start;
+        while (end < uri.Length && char.IsDigit(uri[end])) end++;
+        if (end == start) return null;
+        return int.TryParse(uri.AsSpan(start, end - start), out var id) ? id : null;
+    }
+
+    private static bool IsLeavingCreateWizard(string? target)
+    {
+        if (string.IsNullOrEmpty(target)) return true;
+        return !target.Contains("/create-document", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async ValueTask OnLocationChangingAsync(LocationChangingContext ctx)
+    {
+        if (_suppressDraftSave) return;
+        if (!IsLeavingCreateWizard(ctx.TargetLocation)) return;
+        if (!HasMeaningfulWizardProgress()) return;
+        if (showLeaveDraftModal) return;
+
+        _leaveNavigationTarget = ctx.TargetLocation;
+        leaveModalError = null;
+        ctx.PreventNavigation();
+        showLeaveDraftModal = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string ToNavigatorUri(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target)) return "/";
+        if (Uri.TryCreate(target, UriKind.Absolute, out var abs))
+        {
+            var p = abs.PathAndQuery;
+            return string.IsNullOrEmpty(p) ? "/" : p;
+        }
+
+        return target.StartsWith('/') ? target : "/" + target;
+    }
+
+    private void StayOnLeaveDraftDialog()
+    {
+        if (leaveChoiceBusy) return;
+        showLeaveDraftModal = false;
+        _leaveNavigationTarget = null;
+        leaveModalError = null;
+    }
+
+    private async Task DiscardAndLeaveWizardAsync()
+    {
+        if (leaveChoiceBusy || string.IsNullOrEmpty(_leaveNavigationTarget)) return;
+        leaveChoiceBusy = true;
+        leaveModalError = null;
+        try
+        {
+            await ClearPrecategoryStorageAsync();
+            var dest = ToNavigatorUri(_leaveNavigationTarget);
+            showLeaveDraftModal = false;
+            _leaveNavigationTarget = null;
+            _suppressDraftSave = true;
+            Navigation.NavigateTo(dest);
+        }
+        finally
+        {
+            leaveChoiceBusy = false;
+        }
+    }
+
+    private async Task SaveAndLeaveWizardAsync()
+    {
+        if (leaveChoiceBusy || string.IsNullOrEmpty(_leaveNavigationTarget)) return;
+        leaveChoiceBusy = true;
+        leaveModalError = null;
+        try
+        {
+            await SaveWizardDraftIfNeededCoreAsync(throwOnFailure: true);
+            var dest = ToNavigatorUri(_leaveNavigationTarget);
+            showLeaveDraftModal = false;
+            _leaveNavigationTarget = null;
+            _suppressDraftSave = true;
+            Navigation.NavigateTo(dest);
+        }
+        catch (Exception ex)
+        {
+            leaveModalError = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Не удалось сохранить черновик."
+                : ex.Message;
+        }
+        finally
+        {
+            leaveChoiceBusy = false;
+        }
+    }
+
+    private async Task TryRestorePrecategoryFromStorageAsync()
+    {
+        if (_pendingResumeDraftId is not null) return;
+        if (selectedTemplateId is not null) return;
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("MPKDocuments.storageGet", PrecatStorageKey);
+            if (string.IsNullOrWhiteSpace(json)) return;
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("category", out var c) && c.ValueKind == JsonValueKind.String)
+                selectedCategory = c.GetString();
+            if (root.TryGetProperty("step", out var s) && s.TryGetInt32(out var st))
+                currentStep = st is >= 0 and <= 1 ? st : 0;
+            if (string.IsNullOrWhiteSpace(selectedCategory))
+                currentStep = 0;
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private async Task SavePrecategoryToStorageAsync()
+    {
+        if (string.IsNullOrWhiteSpace(selectedCategory)) return;
+        if (currentStep > 1) return;
+        try
+        {
+            var json = JsonSerializer.Serialize(new { category = selectedCategory, step = currentStep });
+            await JS.InvokeVoidAsync("MPKDocuments.storageSet", PrecatStorageKey, json);
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private async Task ClearPrecategoryStorageAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.storageRemove", PrecatStorageKey);
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private Dictionary<string, object?> BuildDraftContentForApi()
+    {
+        var c = BuildContent();
+        c.Remove("otpCode");
+        c["wizardStep"] = currentStep;
+        if (!string.IsNullOrWhiteSpace(selectedCategory))
+            c["wizardSelectedCategory"] = selectedCategory;
+        return c;
+    }
+
+    private bool HasMeaningfulWizardProgress() =>
+        selectedTemplateId is not null
+        || (currentStep >= 1 && !string.IsNullOrWhiteSpace(selectedCategory));
+
+    private async Task SaveWizardDraftIfNeededCoreAsync(bool throwOnFailure = false)
+    {
+        if (_suppressDraftSave || isSaving) return;
+        if (!HasMeaningfulWizardProgress()) return;
+        if (_draftSaveInFlight) return;
+        if (selectedTemplateId is null)
+        {
+            await SavePrecategoryToStorageAsync();
+            return;
+        }
+
+        _draftSaveInFlight = true;
+        try
+        {
+            var payload = BuildDraftContentForApi();
+            if (_draftDocumentId is int existingId)
+            {
+                await DocsApi.UpdateDraftContentAsync(existingId, payload);
+            }
+            else
+            {
+                var res = await DocsApi.CreateDocumentAsync(
+                    selectedTemplateId.Value,
+                    payload,
+                    selectedSigners.ToList(),
+                    signerDepartmentId: assignMode == AssignMode.Department ? selectedDepartmentId : null,
+                    saveAsDraft: true);
+                _draftDocumentId = res.document_id;
+            }
+
+            if (_pickedFileBytes is { Length: > 0 } && _draftDocumentId is int did)
+                await UploadAttachmentIfNeededAsync(did);
+
+            await ClearPrecategoryStorageAsync();
+        }
+        catch (Exception)
+        {
+            if (throwOnFailure)
+                throw;
+        }
+        finally
+        {
+            _draftSaveInFlight = false;
+        }
+    }
+
+    private async Task ResumeDraftFromServerAsync(int draftId)
+    {
+        if (meId is null) return;
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var d = await DocsApi.GetDetailAsync(draftId);
+            if (!string.Equals(d.status, "DRAFT", StringComparison.OrdinalIgnoreCase))
+            {
+                loadError = "Этот документ не в статусе черновика.";
+                return;
+            }
+
+            if (d.initiator_id != meId.Value)
+            {
+                loadError = "Чужой черновик открыть нельзя.";
+                return;
+            }
+
+            _resumeInProgress = true;
+            _draftDocumentId = draftId;
+            selectedTemplateId = d.template_id;
+            selectedCategory = TryGetWizardCategory(d.content) ?? InferCategoryFromName(d.template_name);
+
+            var detail = await DocsApi.GetTemplateAsync(d.template_id);
+            FillSchemaFieldsFromFormSchema(detail);
+
+            content = new();
+            if (d.content is not null)
+            {
+                foreach (var kv in d.content)
+                {
+                    if (IsWizardMetaKey(kv.Key)) continue;
+                    if (string.Equals(kv.Key, "signerUserIds", StringComparison.OrdinalIgnoreCase)) continue;
+                    content[kv.Key] = NormalizeJsonValue(kv.Value);
+                }
+            }
+
+            selectedSigners.Clear();
+            if (d.content is not null && d.content.TryGetValue("signerUserIds", out var sjv))
+            {
+                if (sjv is JsonElement arr && arr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var el in arr.EnumerateArray())
+                    {
+                        if (el.TryGetInt32(out var sid)) selectedSigners.Add(sid);
+                    }
+                }
+            }
+
+            if (d.content is not null && d.content.TryGetValue("assignMode", out var am))
+            {
+                var mode = NormalizeJsonValue(am)?.ToString();
+                assignMode = string.Equals(mode, "department", StringComparison.OrdinalIgnoreCase)
+                    ? AssignMode.Department
+                    : AssignMode.Users;
+            }
+
+            if (d.content is not null && d.content.TryGetValue("signerDepartmentId", out var deptId))
+            {
+                var n = NormalizeJsonValue(deptId);
+                if (n is long ll) selectedDepartmentId = (int)ll;
+                else if (n is int ii) selectedDepartmentId = ii;
+                else if (n is JsonElement je && je.ValueKind == JsonValueKind.Number && je.TryGetInt32(out var di))
+                    selectedDepartmentId = di;
+            }
+
+            if (d.content is not null && d.content.TryGetValue("requiresPersonalSign", out var rps))
+            {
+                var v = NormalizeJsonValue(rps);
+                requiresPersonalSign = v is bool b ? b : v?.ToString() is "true" or "True";
+            }
+
+            if (d.content is not null && d.content.TryGetValue("docDate", out var dd) && NormalizeJsonValue(dd) is string ds &&
+                DateTime.TryParse(ds, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                docDate = parsed.Date;
+
+            if (d.content is not null && d.content.TryGetValue("note", out var noteEl))
+                docNote = NormalizeJsonValue(noteEl)?.ToString() ?? "";
+
+            fileName = content.TryGetValue("fileName", out var fn) ? fn?.ToString() ?? "" : "";
+            PickedFileName = fileName;
+            if (d.content is not null && d.content.TryGetValue("fileSize", out var fsz))
+            {
+                var n = NormalizeJsonValue(fsz);
+                if (n is long l) PickedFileSizeBytes = l;
+                else if (n is int i) PickedFileSizeBytes = i;
+                else if (n is JsonElement je && je.ValueKind == JsonValueKind.Number && je.TryGetInt64(out var lb))
+                    PickedFileSizeBytes = lb;
+            }
+
+            var step = 2;
+            if (d.content is not null && d.content.TryGetValue("wizardStep", out var ws))
+            {
+                var n = NormalizeJsonValue(ws);
+                if (n is int i) step = i;
+                else if (n is long l) step = (int)l;
+                else if (n is JsonElement je && je.ValueKind == JsonValueKind.Number && je.TryGetInt32(out var wi))
+                    step = wi;
+            }
+
+            currentStep = Math.Clamp(step, 0, 4);
+
+            if (d.has_file_attachment)
+            {
+                try
+                {
+                    var (body, _) = await DocsApi.DownloadDocumentFileAsync(draftId);
+                    _pickedFileBytes = body;
+                }
+                catch
+                {
+                    _pickedFileBytes = null;
+                }
+            }
+
+            // Если в черновике уже есть файл (или имя в контенте), не оставляем на шаге «Загрузить файл» (2):
+            // старые черновики без wizardStep или с шагом 2 после загрузки файла иначе снова показывали зону загрузки.
+            var hasFileOnRecord = d.has_file_attachment
+                || (_pickedFileBytes is { Length: > 0 })
+                || !string.IsNullOrWhiteSpace(fileName);
+            if (hasFileOnRecord && currentStep == 2)
+                currentStep = 3;
+
+            Navigation.NavigateTo("/create-document", replace: true);
+        }
+        catch
+        {
+            loadError = "Не удалось восстановить черновик.";
+        }
+        finally
+        {
+            _resumeInProgress = false;
+            isLoading = false;
+        }
+    }
+
+    private static string? TryGetWizardCategory(Dictionary<string, object?>? c)
+    {
+        if (c is null || !c.TryGetValue("wizardSelectedCategory", out var v)) return null;
+        return NormalizeJsonValue(v)?.ToString();
+    }
+
+    private static bool IsWizardMetaKey(string key) =>
+        string.Equals(key, "wizardStep", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "wizardSelectedCategory", StringComparison.OrdinalIgnoreCase);
+
+    private static object? NormalizeJsonValue(object? v)
+    {
+        if (v is JsonElement je)
+        {
+            return je.ValueKind switch
+            {
+                JsonValueKind.String => je.GetString(),
+                JsonValueKind.Number => je.TryGetInt64(out var l) ? l : je.GetDouble(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                JsonValueKind.Array => je,
+                JsonValueKind.Object => je,
+                _ => je.GetRawText(),
+            };
+        }
+
+        return v;
+    }
+}
