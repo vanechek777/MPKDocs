@@ -1,25 +1,14 @@
-import os
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.admin_access import user_is_admin
 from app.db.models import Department, Position, User
 from app.db.session import get_db
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-
-def _admin_user_ids() -> set[int]:
-    raw = (os.getenv("MPK_ADMIN_USER_IDS") or "1").strip()
-    out: set[int] = set()
-    for part in raw.split(","):
-        part = part.strip()
-        if part.isdigit():
-            out.add(int(part))
-    return out
 
 
 class MeResponse(BaseModel):
@@ -52,7 +41,7 @@ async def me(
             .where(User.id == user.id),
         )
     ).one()
-    admins = _admin_user_ids()
+    u = (await db.execute(select(User).where(User.id == user.id))).scalar_one()
     return MeResponse(
         id=int(row.id),
         phone_number=row.PhoneNumber,
@@ -60,7 +49,7 @@ async def me(
         email=row.Email,
         department=row.department_name,
         position=row.position_name,
-        is_admin=int(row.id) in admins,
+        is_admin=user_is_admin(u),
     )
 
 
@@ -144,7 +133,7 @@ async def patch_me(
             .where(User.id == user.id),
         )
     ).one()
-    admins = _admin_user_ids()
+    u = (await db.execute(select(User).where(User.id == user.id))).scalar_one()
     return MeResponse(
         id=int(row.id),
         phone_number=row.PhoneNumber,
@@ -152,7 +141,7 @@ async def patch_me(
         email=row.Email,
         department=row.department_name,
         position=row.position_name,
-        is_admin=int(row.id) in admins,
+        is_admin=user_is_admin(u),
     )
 
 

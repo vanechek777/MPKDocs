@@ -10,6 +10,7 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
 @using MPKDocumentsMAUI.Shared.Nep
+@using MPKDocumentsMAUI.Shared.Ui
 
 <PageTitle>@docName — МПК Документы</PageTitle>
 
@@ -103,7 +104,7 @@
                         <div class="file-name">@docName</div>
                         <div class="file-size">@attachmentSizeLabel</div>
                     </div>
-                    <button type="button" class="download-btn" title="Скачать файл" disabled="@(!hasFileAttachment || isBusy || isDownloadingAttachment)" @onclick="DownloadAttachmentAsync">
+                    <button type="button" class="download-btn" title="Скачать файл" disabled="@(!hasFileAttachment || isBusy || isDownloadingAttachment || isDownloadingEsig)" @onclick="DownloadAttachmentAsync">
                         @if (isDownloadingAttachment)
                         {
                             <span class="detail-download-spinner mpk-spinner mpk-spinner--md" role="status" aria-label="Загрузка"></span>
@@ -114,11 +115,53 @@
                         }
                     </button>
                 </div>
+                @if (isDownloadingAttachment)
+                {
+                    <div class="detail-file-download-progress" aria-live="polite">
+                        @if (attachmentDownloadBytesTotal is > 0)
+                        {
+                            <progress class="detail-native-progress" max="@attachmentDownloadBytesTotal" value="@attachmentDownloadBytesRead"></progress>
+                        }
+                        else
+                        {
+                            <progress class="detail-native-progress"></progress>
+                        }
+                        <div class="detail-progress-meta">
+                            @FormatBytes(attachmentDownloadBytesRead)@(attachmentDownloadBytesTotal is { } at ? $" / {FormatBytes(at)}" : "")
+                        </div>
+                    </div>
+                }
                 @if (myNepExportAvailable)
                 {
                     <div class="detail-nep-actions">
-                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@isBusy" @onclick="ViewNepCertificateAsync">Просмотреть НЭП</button>
+                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@(isBusy || isDownloadingAttachment || isDownloadingEsig)" @onclick="ViewNepCertificateAsync">Просмотреть НЭП</button>
+                        <button type="button" class="btn btn-secondary btn-sm detail-nep-btn" disabled="@(isBusy || isDownloadingAttachment || isDownloadingEsig)" @onclick="DownloadNepEsigAsync">
+                            @if (isDownloadingEsig)
+                            {
+                                <span class="mpk-spinner mpk-spinner--sm" role="status" aria-label="Загрузка"></span>
+                            }
+                            else
+                            {
+                                <span>Скачать (.esig)</span>
+                            }
+                        </button>
                     </div>
+                    @if (isDownloadingEsig)
+                    {
+                        <div class="detail-file-download-progress detail-esig-download-progress" aria-live="polite">
+                            @if (esigDownloadBytesTotal is > 0)
+                            {
+                                <progress class="detail-native-progress" max="@esigDownloadBytesTotal" value="@esigDownloadBytesRead"></progress>
+                            }
+                            else
+                            {
+                                <progress class="detail-native-progress"></progress>
+                            }
+                            <div class="detail-progress-meta">
+                                @FormatBytes(esigDownloadBytesRead)@(esigDownloadBytesTotal is { } et ? $" / {FormatBytes(et)}" : "")
+                            </div>
+                        </div>
+                    }
                 }
             </div>
 
@@ -188,7 +231,7 @@
             else
             {
                 <div class="detail-actions">
-                    <button class="btn btn-green" disabled="@(isBusy || otpSendBusy)" @onclick="StartSignAsync">
+                    <button class="btn btn-green" disabled="@(isBusy || otpSendBusy || signOtpBusy)" @onclick="StartSignAsync">
                         @if (otpSendBusy)
                         {
                             <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Отправка кода…</span></span>
@@ -198,7 +241,7 @@
                             <span>Подписать и закрыть</span>
                         }
                     </button>
-                    <button class="btn btn-red" @onclick="RejectAndClose" disabled="@isBusy">Отклонить и закрыть</button>
+                    <button class="btn btn-red" @onclick="RejectAndClose" disabled="@(isBusy || signOtpBusy)">Отклонить и закрыть</button>
                 </div>
             }
 
@@ -229,8 +272,11 @@
 
 @* Modals *@
 <OtpConfirmModal IsVisible="showOtp" DocumentName="@docName" PhoneHint="@phoneOtpHint"
-                 OnClose="() => showOtp = false"
-                 TrySubmitAsync="TrySubmitSignOtpAsync" />
+                 OnClose="CloseOtpModal"
+                 TrySubmitAsync="TrySubmitSignOtpAsync"
+                 IsSubmitting="signOtpBusy"
+                 SubmitError="@otpSubmitError"
+                 SubmittingText="Проверка кода и подписание документа…" />
 
 <SuccessModal IsVisible="showSuccess" DocumentName="@docName"
               OnClose="OnSuccessClosed" />
@@ -239,6 +285,8 @@
     [Parameter] public string DocId { get; set; } = "";
 
     private int? _docId;
+    /// <summary>Уже отправили POST /view для текущего _docId в этой сессии (повторные LoadAsync не дублируют запрос).</summary>
+    private bool _viewSyncPosted;
     private string docName = "Документ";
     private string initiatorName = "";
     private string templateName = "";
@@ -250,9 +298,18 @@
 
     private bool showSigners = true;
     private bool showOtp = false;
+    private bool signOtpBusy;
+    private string? otpSubmitError;
     private bool showSuccess = false;
     private bool otpSendBusy;
     private bool isDownloadingAttachment;
+    private bool isDownloadingEsig;
+    private long attachmentDownloadBytesRead;
+    private long? attachmentDownloadBytesTotal;
+    private long esigDownloadBytesRead;
+    private long? esigDownloadBytesTotal;
+    private long _attachmentProgressUiGate;
+    private long _esigProgressUiGate;
     private string? documentSignedAtDisplay;
     private string phoneOtpHint = "";
 
@@ -308,15 +365,49 @@
         return unit == 0 ? $"{bytes} {units[unit]}" : $"{size:0.##} {units[unit]}";
     }
 
+    private IProgress<(long BytesRead, long? ContentLength)> CreateAttachmentDownloadProgressReporter()
+    {
+        return new Progress<(long BytesRead, long? ContentLength)>(p =>
+        {
+            attachmentDownloadBytesRead = p.BytesRead;
+            attachmentDownloadBytesTotal = p.ContentLength;
+            var now = Environment.TickCount64;
+            var total = p.ContentLength ?? long.MaxValue;
+            if (p.BytesRead < total && now - _attachmentProgressUiGate < 120)
+                return;
+            _attachmentProgressUiGate = now;
+            _ = InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private IProgress<(long BytesRead, long? ContentLength)> CreateEsigDownloadProgressReporter()
+    {
+        return new Progress<(long BytesRead, long? ContentLength)>(p =>
+        {
+            esigDownloadBytesRead = p.BytesRead;
+            esigDownloadBytesTotal = p.ContentLength;
+            var now = Environment.TickCount64;
+            var total = p.ContentLength ?? long.MaxValue;
+            if (p.BytesRead < total && now - _esigProgressUiGate < 120)
+                return;
+            _esigProgressUiGate = now;
+            _ = InvokeAsync(StateHasChanged);
+        });
+    }
+
     private async Task DownloadAttachmentAsync()
     {
         if (_docId is null || !hasFileAttachment) return;
         isDownloadingAttachment = true;
+        attachmentDownloadBytesRead = 0;
+        attachmentDownloadBytesTotal = null;
+        _attachmentProgressUiGate = 0;
         loadError = null;
         await InvokeAsync(StateHasChanged);
         try
         {
-            var (body, ct) = await DocsApi.DownloadDocumentFileAsync(_docId.Value);
+            var progress = CreateAttachmentDownloadProgressReporter();
+            var (body, ct) = await DocsApi.DownloadDocumentFileAsync(_docId.Value, default, progress);
             var mime = ct ?? attachmentMime ?? "application/octet-stream";
             var safeName = string.IsNullOrWhiteSpace(docName) ? $"document-{_docId.Value}" : docName.Trim();
             var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
@@ -351,6 +442,39 @@
         return dates.Max().ToLocalTime().ToString("dd.MM.yyyy HH:mm", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
     }
 
+    private async Task DownloadNepEsigAsync()
+    {
+        if (_docId is null || !myNepExportAvailable) return;
+        isDownloadingEsig = true;
+        esigDownloadBytesRead = 0;
+        esigDownloadBytesTotal = null;
+        _esigProgressUiGate = 0;
+        loadError = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var progress = CreateEsigDownloadProgressReporter();
+            var body = await DocsApi.DownloadMyNepEsigAsync(_docId.Value, default, progress);
+            var baseName = string.IsNullOrWhiteSpace(docName) ? $"document-{_docId.Value}" : Path.GetFileNameWithoutExtension(docName.Trim());
+            if (string.IsNullOrWhiteSpace(baseName))
+                baseName = $"document-{_docId.Value}";
+            var fileName = $"{baseName}.esig";
+            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
+            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
+            await mod.InvokeVoidAsync("downloadBase64", fileName, Convert.ToBase64String(body), "application/octet-stream");
+            await mod.DisposeAsync();
+        }
+        catch
+        {
+            loadError = "Не удалось скачать файл НЭП (.esig).";
+        }
+        finally
+        {
+            isDownloadingEsig = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private async Task ViewNepCertificateAsync()
     {
         if (_docId is null || !myNepExportAvailable) return;
@@ -379,10 +503,18 @@
         }
     }
 
+    private void CloseOtpModal()
+    {
+        if (signOtpBusy) return;
+        showOtp = false;
+        otpSubmitError = null;
+    }
+
     private async Task StartSignAsync()
     {
-        if (otpSendBusy || isBusy) return;
+        if (otpSendBusy || isBusy || signOtpBusy) return;
         loadError = null;
+        otpSubmitError = null;
         otpSendBusy = true;
         await InvokeAsync(StateHasChanged);
         try
@@ -526,6 +658,7 @@
 
         if (_docId == id) return;
         _docId = id;
+        _viewSyncPosted = false;
         await LoadAsync();
     }
 
@@ -630,12 +763,17 @@
 
             documentSignedAtDisplay = ComputeSignedAtDisplay(d);
 
-            try
+            if (!_viewSyncPosted)
             {
-                await DocsApi.RecordDocumentViewAsync(_docId.Value);
-            }
-            catch
-            {
+                _viewSyncPosted = true;
+                try
+                {
+                    await DocsApi.RecordDocumentViewAsync(_docId.Value);
+                }
+                catch
+                {
+                    _viewSyncPosted = false;
+                }
             }
         }
         catch
@@ -658,7 +796,7 @@
         try
         {
             var res = await DocsApi.CancelAsync(_docId.Value);
-            if (!res.ok)
+            if (res.ok is false)
             {
                 loadError = "Не удалось отменить отправку.";
                 await InvokeAsync(StateHasChanged);
@@ -679,52 +817,73 @@
         }
     }
 
-    /// <summary>Возвращает false только при неверном OTP (модалка подсветит поля).</summary>
-    private async Task<bool> TrySubmitSignOtpAsync(string code)
+    private async Task<OtpSubmitResult> TrySubmitSignOtpAsync(string code)
     {
-        if (_docId is null) return true;
+        if (_docId is null)
+        {
+            otpSubmitError = "Не удалось определить документ.";
+            return OtpSubmitResult.FailedRetryable;
+        }
 
-        isBusy = true;
-        loadError = null;
+        signOtpBusy = true;
+        otpSubmitError = null;
+        await InvokeAsync(StateHasChanged);
+
+        OtpSubmitResult result;
         try
         {
             var outcome = await DocsApi.SignDocumentAsync(_docId.Value, code);
             if (outcome.InvalidOtp)
-                return false;
-
-            if (!outcome.Ok || outcome.Data is null)
             {
-                loadError = "Ошибка подписи. Проверь соединение с API.";
-                showOtp = false;
-                await InvokeAsync(StateHasChanged);
-                return true;
+                result = OtpSubmitResult.InvalidCode;
             }
-
-            if (!outcome.Data.ok)
+            else if (!outcome.Ok || outcome.Data is null)
             {
-                loadError = "Не удалось подписать: нет задания на подпись для текущего пользователя.";
-                showOtp = false;
-                await InvokeAsync(StateHasChanged);
-                return true;
+                otpSubmitError = "Сервер не ответил или ответ не распознан. Проверьте сеть и повторите ввод кода.";
+                result = OtpSubmitResult.FailedRetryable;
             }
+            else if (outcome.Data.ok is false)
+            {
+                otpSubmitError =
+                    "Подписание не выполнено: нет активного задания на подпись для вашей учётной записи (возможно, документ уже обработан или очередь ещё не дошла до вас).";
+                result = OtpSubmitResult.FailedRetryable;
+            }
+            else
+            {
+                showOtp = false;
+                otpSubmitError = null;
+                await InvokeAsync(StateHasChanged);
 
-            showOtp = false;
-            await InvokeAsync(StateHasChanged);
-            await LoadAsync();
-            showSuccess = true;
-            return true;
+                await LoadAsync();
+
+                if (!MySigned && !IsSigned)
+                {
+                    otpSubmitError =
+                        "Сервер принял запрос, но статус подписи не обновился. Закройте окно и откройте документ снова или повторите попытку.";
+                    showOtp = true;
+                    result = OtpSubmitResult.FailedRetryable;
+                }
+                else
+                {
+                    showSuccess = true;
+                    result = OtpSubmitResult.Succeeded;
+                }
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            loadError = "Ошибка подписи. Проверь соединение с API.";
-            showOtp = false;
-            await InvokeAsync(StateHasChanged);
-            return true;
+            otpSubmitError = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Ошибка подписи. Проверьте соединение с API."
+                : ex.Message;
+            result = OtpSubmitResult.FailedRetryable;
         }
         finally
         {
-            isBusy = false;
+            signOtpBusy = false;
         }
+
+        await InvokeAsync(StateHasChanged);
+        return result;
     }
 
     private void OnSuccessClosed()
@@ -740,9 +899,10 @@
         try
         {
             var res = await DocsApi.RejectAsync(_docId.Value, reason: null);
-            if (!res.ok)
+            if (res.ok is false)
             {
                 loadError = "Не удалось отклонить: нет задания для отклонения.";
+                await InvokeAsync(StateHasChanged);
                 return;
             }
             Navigation.NavigateTo(_leaveRoute);
@@ -750,10 +910,12 @@
         catch
         {
             loadError = "Ошибка отклонения. Проверь соединение с API.";
+            await InvokeAsync(StateHasChanged);
         }
         finally
         {
             isBusy = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 }

@@ -20,8 +20,13 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IMobileShellService, MobileShellService>();
             builder.Services.AddSingleton<IQrScanService, NullQrScanService>();
             builder.Services.AddSingleton<IDocumentFilePicker, NullDocumentFilePicker>();
-            builder.Services.AddSingleton(new ApiOptions());
+            var apiBase = builder.Configuration["Api:BaseUrl"];
+            builder.Services.AddSingleton(
+                string.IsNullOrWhiteSpace(apiBase)
+                    ? new ApiOptions()
+                    : new ApiOptions { BaseUrl = apiBase.Trim() });
             builder.Services.AddSingleton<INotificationPermissionService, WebNotificationPermissionService>();
+            builder.Services.AddSingleton<AdminApiClient>();
 
             var app = builder.Build();
 

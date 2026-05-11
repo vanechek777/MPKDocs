@@ -42,7 +42,8 @@ public sealed record ActionRequestDto(
 );
 
 public sealed record ActionResponseDto(
-    bool ok,
+    /// <summary>Если в JSON поле отсутствует, null — не считаем отказом (совместимость с разными сериализаторами).</summary>
+    bool? ok,
     [property: JsonPropertyName("document_id")] int document_id,
     [property: JsonPropertyName("document_status")] string? document_status
 );

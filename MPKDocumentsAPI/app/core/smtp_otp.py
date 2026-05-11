@@ -53,6 +53,30 @@ def build_otp_email_plain_and_html(code: str) -> tuple[str, str]:
     return plain, body_html
 
 
+def build_registration_otp_email_plain_and_html(code: str) -> tuple[str, str]:
+    """Текст для письма с кодом подтверждения регистрации."""
+    raw = (code or "").strip()
+    safe_html = html.escape(raw, quote=True)
+    plain = (
+        "Здравствуйте,\n\n"
+        f"Ваш код для завершения регистрации в МПК.Документы: {raw}\n\n"
+        "Код действует 10 минут. Если вы не создавали аккаунт, проигнорируйте письмо.\n\n"
+        "Поддержка: mpkchita.ru"
+    )
+    body_html = f"""<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"></head>
+<body>
+<p>Здравствуйте,</p>
+<p>Ваш код для <strong>завершения регистрации</strong> в МПК.Документы:</p>
+<h2 style="letter-spacing:6px;font:700 24px system-ui">{safe_html}</h2>
+<p>Код действует 10 минут. Если вы не создавали аккаунт, проигнорируйте письмо.</p>
+<p style="color:#666;font-size:12px">Поддержка: mpkchita.ru</p>
+</body>
+</html>"""
+    return plain, body_html
+
+
 async def send_otp_email(
     *,
     to_addr: str,

@@ -36,6 +36,14 @@ public sealed class AuthService
     public Task<EmailCodeSendResponse> SendEmailLoginCodeAsync(string email) =>
         _api.SendEmailLoginCodeAsync(new EmailLoginSendRequest(NormalizeEmail(email)));
 
+    public async Task LoginWithPasswordAsync(string phoneNumber, string password)
+    {
+        var token = await _api.LoginAsync(
+            new LoginRequest(phoneNumber.Trim(), password));
+        await _tokenStore.SetAccessTokenAsync(token.access_token);
+        _authState.NotifyAuthChanged();
+    }
+
     public async Task LoginWithEmailCodeAsync(string email, string code)
     {
         var token = await _api.VerifyEmailLoginAsync(

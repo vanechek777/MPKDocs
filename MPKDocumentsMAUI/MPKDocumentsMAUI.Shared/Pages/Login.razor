@@ -1,7 +1,6 @@
 @page "/login"
 @layout MPKDocumentsMAUI.Shared.Layout.AuthLayout
 
-@using System.ComponentModel.DataAnnotations
 @inject NavigationManager Nav
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
@@ -11,16 +10,68 @@
         <div class="auth-brand">
             <div>
                 <h2 class="auth-title">Вход</h2>
-                <div class="auth-subtitle">МПК Документы — код на почте</div>
+                <div class="auth-subtitle">
+                    @if (_kind == LoginKind.Password)
+                    {
+                        <text>МПК Документы — номер телефона и пароль</text>
+                    }
+                    else
+                    {
+                        <text>МПК Документы — код на почту</text>
+                    }
+                </div>
             </div>
         </div>
+
+        @if (!(_kind == LoginKind.Email && _step == LoginStep.Code))
+        {
+            <div class="auth-mode-switch">
+                <button type="button" class="auth-mode-btn @(_kind == LoginKind.Password ? "auth-mode-btn--active" : null)" @onclick="() => SetKind(LoginKind.Password)">
+                    По паролю
+                </button>
+                <button type="button" class="auth-mode-btn @(_kind == LoginKind.Email ? "auth-mode-btn--active" : null)" @onclick="() => SetKind(LoginKind.Email)">
+                    По коду на почту
+                </button>
+            </div>
+        }
 
         @if (!string.IsNullOrWhiteSpace(_error))
         {
             <div class="auth-error">@_error</div>
         }
 
-        @if (_step == LoginStep.Email)
+        @if (_kind == LoginKind.Password)
+        {
+            <div class="form-group">
+                <label class="form-label">Телефон</label>
+                <InputText class="form-input" type="tel" autocomplete="username"
+                           @bind-Value="_phone" placeholder="+79990000000" />
+                <div class="form-hint-muted">Тот же номер, что при регистрации.</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Пароль</label>
+                <InputText class="form-input" type="password" autocomplete="current-password"
+                           @bind-Value="_password" />
+            </div>
+
+            <div class="auth-actions">
+                <button class="btn btn-green" disabled="@_busyPasswordLogin" type="button" @onclick="LoginWithPasswordAsync">
+                    @if (_busyPasswordLogin)
+                    {
+                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Входим…</span></span>
+                    }
+                    else
+                    {
+                        <span>Войти</span>
+                    }
+                </button>
+                <button class="btn btn-outline" type="button" @onclick="GoRegister">
+                    Регистрация
+                </button>
+            </div>
+        }
+        else if (_step == LoginStep.Email)
         {
             <div class="form-group">
                 <label class="form-label">Электронная почта</label>
@@ -82,15 +133,69 @@
 </div>
 
 @code {
+    private enum LoginKind { Password, Email }
+
     private enum LoginStep { Email, Code }
 
+    private LoginKind _kind = LoginKind.Password;
     private LoginStep _step = LoginStep.Email;
+
+    private bool _busyPasswordLogin;
     private bool _busyCode;
     private bool _busyLogin;
     private string? _error;
+
+    private string _phone = "";
+    private string _password = "";
+
     private string _email = "";
     private string _code = "";
     private string? _lastDevLoginCode;
+
+    private void SetKind(LoginKind k)
+    {
+        _kind = k;
+        _error = null;
+        if (k == LoginKind.Email)
+        {
+            _step = LoginStep.Email;
+            _code = "";
+            _lastDevLoginCode = null;
+        }
+    }
+
+    private async Task LoginWithPasswordAsync()
+    {
+        if (_busyPasswordLogin) return;
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_phone))
+        {
+            _error = "Укажите номер телефона.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Введите пароль.";
+            return;
+        }
+
+        _busyPasswordLogin = true;
+        try
+        {
+            await Auth.LoginWithPasswordAsync(_phone, _password);
+            Nav.NavigateTo(MobileShell.IsSigningOnlyShell ? "/signing" : "/", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Неверный телефон или пароль."
+                : ex.Message;
+        }
+        finally
+        {
+            _busyPasswordLogin = false;
+        }
+    }
 
     private async Task SendCodeAsync()
     {

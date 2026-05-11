@@ -35,10 +35,7 @@ public sealed class AuthApiClient
         using var content = new StringContent("{}", Encoding.UTF8, "application/json");
         var res = await _http.PostAsync(U("/auth/otp/send"), content, ct);
         if (!res.IsSuccessStatusCode)
-        {
-            var msg = await ReadFastApiDetailAsync(res, ct);
-            throw new HttpRequestException(msg);
-        }
+            await ThrowIfFailedAsync(res, ct);
 
         return (await res.Content.ReadFromJsonAsync<OtpSendResponse>(cancellationToken: ct))
                ?? new OtpSendResponse(Ok: true, DevCode: null);
@@ -68,17 +65,24 @@ public sealed class AuthApiClient
         return res.ReasonPhrase ?? "Ошибка запроса";
     }
 
+    private static async Task ThrowIfFailedAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        if (res.IsSuccessStatusCode) return;
+        var raw = await ReadFastApiDetailAsync(res, ct);
+        throw new HttpRequestException(HttpApiErrorFormatter.Humanize(res.StatusCode, raw));
+    }
+
     public async Task<TokenResponse> LoginAsync(LoginRequest req, CancellationToken ct = default)
     {
         var res = await _http.PostAsJsonAsync(U("/auth/login"), req, ct);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfFailedAsync(res, ct);
         return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
     }
 
     public async Task<TokenResponse> RegisterAsync(RegisterRequest req, CancellationToken ct = default)
     {
         var res = await _http.PostAsJsonAsync(U("/auth/register"), req, ct);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfFailedAsync(res, ct);
         return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
     }
 
@@ -87,8 +91,7 @@ public sealed class AuthApiClient
         CancellationToken ct = default)
     {
         var res = await _http.PostAsJsonAsync(U("/auth/email/login/send"), req, ct);
-        if (!res.IsSuccessStatusCode)
-            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+        await ThrowIfFailedAsync(res, ct);
 
         return (await res.Content.ReadFromJsonAsync<EmailCodeSendResponse>(cancellationToken: ct))
                ?? new EmailCodeSendResponse(Ok: true, DevCode: null);
@@ -99,8 +102,7 @@ public sealed class AuthApiClient
         CancellationToken ct = default)
     {
         var res = await _http.PostAsJsonAsync(U("/auth/email/login/verify"), req, ct);
-        if (!res.IsSuccessStatusCode)
-            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+        await ThrowIfFailedAsync(res, ct);
 
         return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
     }
@@ -110,8 +112,7 @@ public sealed class AuthApiClient
         CancellationToken ct = default)
     {
         var res = await _http.PostAsJsonAsync(U("/auth/email/register/start"), pending, ct);
-        if (!res.IsSuccessStatusCode)
-            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+        await ThrowIfFailedAsync(res, ct);
 
         return (await res.Content.ReadFromJsonAsync<EmailCodeSendResponse>(cancellationToken: ct))
                ?? new EmailCodeSendResponse(Ok: true, DevCode: null);
@@ -122,8 +123,7 @@ public sealed class AuthApiClient
         CancellationToken ct = default)
     {
         var res = await _http.PostAsJsonAsync(U("/auth/email/register/verify"), req, ct);
-        if (!res.IsSuccessStatusCode)
-            throw new HttpRequestException(await ReadFastApiDetailAsync(res, ct));
+        await ThrowIfFailedAsync(res, ct);
 
         return (await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct))!;
     }
@@ -132,7 +132,7 @@ public sealed class AuthApiClient
     {
         await AttachAuthAsync();
         var res = await _http.GetAsync(U("/users/me"), ct);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfFailedAsync(res, ct);
         return (await res.Content.ReadFromJsonAsync<MeResponse>(cancellationToken: ct))!;
     }
 
@@ -140,11 +140,7 @@ public sealed class AuthApiClient
     {
         await AttachAuthAsync();
         var res = await _http.PatchAsJsonAsync(U("/users/me"), req, ct);
-        if (!res.IsSuccessStatusCode)
-        {
-            var msg = await ReadFastApiDetailAsync(res, ct);
-            throw new HttpRequestException(msg);
-        }
+        await ThrowIfFailedAsync(res, ct);
 
         return (await res.Content.ReadFromJsonAsync<MeResponse>(cancellationToken: ct))!;
     }

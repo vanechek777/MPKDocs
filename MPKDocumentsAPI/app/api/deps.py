@@ -13,7 +13,9 @@ except Exception as e:  # pragma: no cover
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.admin_access import user_is_admin
 from app.core.config import settings
+from app.core import presence
 from app.db.session import get_db
 from app.db.models import User
 
@@ -47,5 +49,12 @@ async def get_current_user(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    presence.touch(int(user.id))
+    return user
+
+
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    if not user_is_admin(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нужны права администратора")
     return user
 

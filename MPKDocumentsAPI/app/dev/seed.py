@@ -8,6 +8,7 @@ from app.core.security import hash_password
 from app.db.models import (
     Department,
     Document,
+    DocumentCategory,
     DocumentContent,
     DocumentStep,
     DocumentTask,
@@ -62,6 +63,7 @@ async def seed(force: bool = False) -> None:
                     PositionId=pos_accountant.id,
                     Status=True,
                     PasswordHash=pwd,
+                    IsAdmin=False,
                 )
                 u_sausage = User(
                     PhoneNumber="+79990000002",
@@ -70,6 +72,7 @@ async def seed(force: bool = False) -> None:
                     PositionId=pos_worker.id,
                     Status=True,
                     PasswordHash=pwd,
+                    IsAdmin=False,
                 )
                 u_me = User(
                     PhoneNumber="+79148012594",
@@ -78,6 +81,7 @@ async def seed(force: bool = False) -> None:
                     PositionId=pos_manager.id,
                     Status=True,
                     PasswordHash=pwd,
+                    IsAdmin=True,
                 )
                 u_director = User(
                     PhoneNumber="+79990000004",
@@ -86,6 +90,7 @@ async def seed(force: bool = False) -> None:
                     PositionId=pos_director.id,
                     Status=True,
                     PasswordHash=pwd,
+                    IsAdmin=False,
                 )
                 db.add_all([u_initiator, u_sausage, u_me, u_director])
                 await db.flush()
@@ -103,6 +108,32 @@ async def seed(force: bool = False) -> None:
             ).scalar_one_or_none()
             if golomidov is not None:
                 golomidov.PhoneNumber = "+79148012594"
+                golomidov.IsAdmin = True
+
+            by_phone_admin = (
+                await db.execute(select(User).where(User.PhoneNumber == "+79148012594"))
+            ).scalar_one_or_none()
+            if by_phone_admin is not None:
+                by_phone_admin.IsAdmin = True
+
+            # ---- Категории шаблонов ----
+            existing_cats = (await db.execute(select(DocumentCategory))).scalars().all()
+            if not existing_cats:
+                db.add_all(
+                    [
+                        DocumentCategory(Name="Отчёты", SortOrder=10, isActive=True),
+                        DocumentCategory(Name="Приказы", SortOrder=20, isActive=True),
+                        DocumentCategory(Name="Прочее", SortOrder=90, isActive=True),
+                    ]
+                )
+                await db.flush()
+
+            cat_reports = (
+                await db.execute(select(DocumentCategory).where(DocumentCategory.Name == "Отчёты").limit(1))
+            ).scalar_one_or_none()
+            cat_orders = (
+                await db.execute(select(DocumentCategory).where(DocumentCategory.Name == "Приказы").limit(1))
+            ).scalar_one_or_none()
 
             # ---- Templates ----
             # UI expects "категории" отчётов отдельными карточками (как в макете),
@@ -124,8 +155,9 @@ async def seed(force: bool = False) -> None:
                     DocumentTemplate(
                         Name=name,
                         TemplatePath=path,
-                        FormSchema={"fields": []},
+                        FormSchema={"fields": [], "category": "Отчёты"},
                         isActive=True,
+                        CategoryId=cat_reports.id if cat_reports else None,
                     )
                 )
 
@@ -134,14 +166,28 @@ async def seed(force: bool = False) -> None:
                     DocumentTemplate(
                         Name="Приказ",
                         TemplatePath="/templates/order.docx",
-                        FormSchema={"fields": [{"name": "title", "type": "string", "label": "Название"}]},
+                        FormSchema={
+                            "fields": [{"name": "title", "type": "string", "label": "Название"}],
+                            "category": "Приказы",
+                        },
                         isActive=True,
+                        CategoryId=cat_orders.id if cat_orders else None,
                     )
                 )
 
             # Старый общий "Отчет" (если был) выключаем, чтобы не путал UI.
             if "Отчет" in by_name:
                 by_name["Отчет"].isActive = False
+
+            if cat_reports and cat_orders:
+                for tpl in (await db.execute(select(DocumentTemplate))).scalars().all():
+                    if tpl.CategoryId is not None:
+                        continue
+                    low = (tpl.Name or "").lower()
+                    if "отчет" in low or "отчёт" in low:
+                        tpl.CategoryId = cat_reports.id
+                    elif "приказ" in low:
+                        tpl.CategoryId = cat_orders.id
 
             await db.flush()
 

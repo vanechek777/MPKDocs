@@ -44,9 +44,19 @@ class User(Base):
     DepartmentId: Mapped[int | None] = mapped_column(ForeignKey("Departments.id"), nullable=True)
     Status: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
     PasswordHash: Mapped[str] = mapped_column(Text, nullable=False)
+    IsAdmin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     position: Mapped[Position | None] = relationship()
     department: Mapped[Department | None] = relationship()
+
+
+class DocumentCategory(Base):
+    __tablename__ = "DocumentCategories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    Name: Mapped[str] = mapped_column(String(255), nullable=False)
+    SortOrder: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    isActive: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
 
 
 class DocumentTemplate(Base):
@@ -57,6 +67,21 @@ class DocumentTemplate(Base):
     TemplatePath: Mapped[str] = mapped_column(Text, nullable=False)
     FormSchema: Mapped[dict] = mapped_column(JSON, nullable=False)
     isActive: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
+    CategoryId: Mapped[int | None] = mapped_column(ForeignKey("DocumentCategories.id"), nullable=True)
+
+    category: Mapped[DocumentCategory | None] = relationship()
+
+
+class UserActivityLog(Base):
+    __tablename__ = "UserActivityLogs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    UserId: Mapped[int | None] = mapped_column(ForeignKey("Users.id"), nullable=True)
+    Action: Mapped[str] = mapped_column(String(80), nullable=False)
+    Detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    CreatedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True, default=datetime.utcnow)
+
+    user: Mapped[User | None] = relationship(foreign_keys=[UserId])
 
 
 class Document(Base):

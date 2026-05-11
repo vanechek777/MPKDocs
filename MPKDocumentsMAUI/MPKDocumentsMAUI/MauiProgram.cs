@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Storage;
 using MPKDocumentsMAUI.Services;
 using MPKDocumentsMAUI.Shared.Services;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -30,15 +32,15 @@ namespace MPKDocumentsMAUI
 
             builder.Services.AddMauiBlazorWebView();
 
-            // API + auth
-            // Читает базовый URL из ApiOptions по умолчанию (продакшен).
-            // Локально: builder.Services.AddSingleton(new ApiOptions { BaseUrl = "http://localhost:8000" });
+            // API + auth: BaseUrl из Resources/Raw/appsettings.json (ключ Api:BaseUrl), иначе дефолт в ApiOptions.
             // Эмулятор Android к хосту: http://10.0.2.2:8000
-            builder.Services.AddSingleton(new ApiOptions());
-            builder.Services.AddSingleton<HttpClient>();
+            builder.Services.AddSingleton(LoadApiOptionsFromAppPackage());
+            // Явный таймаут: иначе при «молчащем» API кнопка «Отправляем…» висит бесконечно.
+            builder.Services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(3) });
             builder.Services.AddSingleton<IAuthTokenStore, SecureAuthTokenStore>();
             builder.Services.AddSingleton<AuthApiClient>();
             builder.Services.AddSingleton<DocumentsApiClient>();
+            builder.Services.AddSingleton<AdminApiClient>();
             builder.Services.AddAuthorizationCore();
             // Important: register provider both as itself and as base type.
             builder.Services.AddSingleton<ApiAuthenticationStateProvider>();
@@ -52,6 +54,28 @@ namespace MPKDocumentsMAUI
 #endif
 
             return builder.Build();
+        }
+
+        private static ApiOptions LoadApiOptionsFromAppPackage()
+        {
+            try
+            {
+                using var stream = FileSystem.OpenAppPackageFileAsync("appsettings.json").GetAwaiter().GetResult();
+                using var doc = JsonDocument.Parse(stream);
+                if (doc.RootElement.TryGetProperty("Api", out var api) &&
+                    api.TryGetProperty("BaseUrl", out var urlEl))
+                {
+                    var url = urlEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(url))
+                        return new ApiOptions { BaseUrl = url!.Trim() };
+                }
+            }
+            catch
+            {
+                // нет файла или неверный JSON — дефолт из ApiOptions
+            }
+
+            return new ApiOptions();
         }
     }
 }

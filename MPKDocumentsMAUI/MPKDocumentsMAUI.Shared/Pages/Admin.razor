@@ -3,10 +3,11 @@
 @inject NavigationManager Navigation
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
 @inject MPKDocumentsMAUI.Shared.Api.ApiOptions ApiOptions
+@inject MPKDocumentsMAUI.Shared.Api.AdminApiClient AdminApi
 
 <PageTitle>Админ-панель — МПК Документы</PageTitle>
 
-<div class="page-content">
+<div class="page-content admin-page">
     <h1 class="page-title">Админ-панель</h1>
 
     @if (_loading)
@@ -16,19 +17,213 @@
     else if (!_isAdmin)
     {
         <div class="profile-section">
-            <p style="color:var(--text-secondary);margin-bottom:var(--spacing-lg)">У этой учётной записи нет прав администратора.</p>
-            <p style="color:var(--text-tertiary);font-size:var(--font-size-sm)">Список администраторов задаётся на сервере переменной окружения <code style="color:var(--text-secondary)">MPK_ADMIN_USER_IDS</code> (id пользователей через запятую).</p>
+            <p class="admin-muted">У этой учётной записи нет прав администратора.</p>
+            <p class="admin-hint">Админ назначается в БД: <code>Users.IsAdmin = 1</code> (после миграции для <strong>+79148012594</strong> выставлено в сидере) или переменная <code>MPK_ADMIN_USER_IDS</code> (id через запятую).</p>
             <button type="button" class="btn btn-secondary" style="margin-top:var(--spacing-xl)" @onclick="GoProfile">К профилю</button>
         </div>
     }
     else
     {
-        <div class="admin-panel-intro profile-section">
-            <p style="color:var(--text-secondary);margin-bottom:var(--spacing-md)">Раздел для администрирования системы. Здесь можно расширять управление пользователями, шаблонами и журналами.</p>
-            <ul class="admin-panel-links">
-                <li><a class="settings-link" href="@_apiDocsUrl" target="_blank" rel="noopener noreferrer">OpenAPI (Swagger)</a> — описание REST API</li>
-                <li><span style="color:var(--text-tertiary)">База и бэкенд — в репозитории MPKDocumentsAPI</span></li>
-            </ul>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="auth-error admin-banner">@_error</div>
+        }
+
+        <div class="admin-toolbar">
+            <button type="button" class="btn btn-green" disabled="@_busy" @onclick="RefreshAllAsync">Обновить данные</button>
+            <button type="button" class="btn btn-outline" disabled="@_busy" @onclick="PingAsync">Пинг API</button>
+            <a class="settings-link admin-docs-link" href="@_apiDocsUrl" target="_blank" rel="noopener noreferrer">OpenAPI (Swagger)</a>
+        </div>
+
+        <div class="admin-stats">
+            <div class="admin-stat @( _dash?.DatabaseOk == true ? "admin-stat--ok" : "admin-stat--bad")">
+                <div class="admin-stat-label">База данных</div>
+                <div class="admin-stat-value">@(_dash?.DatabaseOk == true ? "OK" : "Ошибка")</div>
+                @if (_dash?.DatabaseLatencyMs is { } ms)
+                {
+                    <div class="admin-stat-sub">запрос SELECT 1: @ms.ToString("0.0") мс</div>
+                }
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Клиент → /health</div>
+                <div class="admin-stat-value">@(_pingMs.HasValue ? $"{_pingMs} мс" : "—")</div>
+                <div class="admin-stat-sub">без авторизации</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Время на сервере (UTC)</div>
+                <div class="admin-stat-value admin-stat-value--sm">@(_dash?.ServerTimeUtc ?? "—")</div>
+                <div class="admin-stat-sub">версия API @(_dash?.AppVersion ?? "—")</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Онлайн (~5 мин)</div>
+                <div class="admin-stat-value">@(_dash?.OnlineUsers5m.ToString() ?? "—")</div>
+                <div class="admin-stat-sub">по последним запросам с JWT</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Пользователей</div>
+                <div class="admin-stat-value">@(_dash?.UsersTotal.ToString() ?? "—")</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Документов</div>
+                <div class="admin-stat-value">@(_dash?.DocumentsTotal.ToString() ?? "—")</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Активных шаблонов</div>
+                <div class="admin-stat-value">@(_dash?.TemplatesActive.ToString() ?? "—")</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-label">Категорий</div>
+                <div class="admin-stat-value">@(_dash?.CategoriesTotal.ToString() ?? "—")</div>
+            </div>
+        </div>
+
+        <div class="profile-section admin-section">
+            <div class="profile-section-title">Журнал действий</div>
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                    <tr>
+                        <th>Время</th>
+                        <th>Пользователь</th>
+                        <th>Действие</th>
+                        <th>Детали</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var a in _activity)
+                    {
+                        <tr>
+                            <td class="admin-nowrap">@(a.CreatedAt ?? "—")</td>
+                            <td>@(string.IsNullOrEmpty(a.UserName) ? (a.UserId?.ToString() ?? "—") : a.UserName)</td>
+                            <td><code class="admin-code">@a.Action</code></td>
+                            <td class="admin-detail">@(a.Detail ?? "—")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="profile-section admin-section">
+            <div class="profile-section-title">Администраторы</div>
+            <p class="admin-hint">Назначить по номеру телефона (пользователь уже должен быть зарегистрирован).</p>
+            <div class="admin-inline-form">
+                <input class="form-input" placeholder="+79990000000" @bind="_promotePhone" />
+                <button type="button" class="btn btn-green" disabled="@_busy" @onclick="PromoteByPhoneAsync">Сделать админом</button>
+            </div>
+            <div class="admin-table-wrap" style="margin-top:var(--spacing-lg)">
+                <table class="admin-table">
+                    <thead>
+                    <tr>
+                        <th>ФИО</th>
+                        <th>Телефон</th>
+                        <th>Админ</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var u in _users.OrderByDescending(x => x.IsAdmin))
+                    {
+                        <tr>
+                            <td>@u.FullName</td>
+                            <td class="admin-nowrap">@u.PhoneNumber</td>
+                            <td>
+                                <label class="toggle-switch" style="vertical-align:middle">
+                                    <input type="checkbox" checked="@u.IsAdmin" disabled="@_busy"
+                                           @onchange="e => ToggleAdminAsync(u, ParseCheckbox(e))" />
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="profile-section admin-section">
+            <div class="profile-section-title">Категории документов</div>
+            <p class="admin-hint">Категория — только группа в мастере «Создать документ». Чтобы появился конкретный тип файла, в блоке ниже добавьте <strong>тип (шаблон)</strong> и привяжите к категории.</p>
+            <div class="admin-inline-form">
+                <input class="form-input" placeholder="Название категории" @bind="_newCategoryName" />
+                <button type="button" class="btn btn-green" disabled="@_busy" @onclick="AddCategoryAsync">Добавить</button>
+            </div>
+            <div class="admin-table-wrap" style="margin-top:var(--spacing-lg)">
+                <table class="admin-table">
+                    <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Порядок</th>
+                        <th>Активна</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var c in _categories.OrderBy(x => x.SortOrder))
+                    {
+                        <tr>
+                            <td>@c.Name</td>
+                            <td>@c.SortOrder</td>
+                            <td>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" checked="@(c.IsActive != false)" disabled="@_busy"
+                                           @onchange="e => PatchCategoryActiveAsync(c.Id, ParseCheckbox(e))" />
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="profile-section admin-section">
+            <div class="profile-section-title">Типы документов (шаблоны)</div>
+            <p class="admin-hint">Минимальная запись для списка в приложении. Путь к .docx можно поправить позже в БД.</p>
+            <div class="admin-inline-form admin-inline-form--wrap">
+                <input class="form-input" style="min-width:200px" placeholder="Название типа" @bind="_newTemplateName" />
+                <select class="form-input" style="max-width:220px" @bind="_newTemplateCategoryId">
+                    <option value="">Без категории</option>
+                    @foreach (var c in _categories.Where(x => x.IsActive != false))
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+                <button type="button" class="btn btn-green" disabled="@_busy" @onclick="AddTemplateAsync">Добавить тип</button>
+            </div>
+            <div class="admin-table-wrap" style="margin-top:var(--spacing-lg)">
+                <table class="admin-table">
+                    <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Категория</th>
+                        <th>Путь</th>
+                        <th>Активен</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var t in _templates)
+                    {
+                        <tr>
+                            <td>@t.Name</td>
+                            <td>@(t.CategoryName ?? "—")</td>
+                            <td class="admin-detail" title="@t.TemplatePath">@AbbrevPath(t.TemplatePath)</td>
+                            <td>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" checked="@(t.IsActive != false)" disabled="@_busy"
+                                           @onchange="e => PatchTemplateActiveAsync(t.Id, ParseCheckbox(e))" />
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="profile-section admin-section">
+            <div class="profile-section-title">Базовый URL API (клиент)</div>
+            <p class="admin-code">@ApiOptions.BaseUrl</p>
         </div>
     }
 </div>
@@ -37,6 +232,20 @@
     private bool _loading = true;
     private bool _isAdmin;
     private string _apiDocsUrl = "";
+    private string? _error;
+    private bool _busy;
+
+    private AdminDashboardDto? _dash;
+    private long? _pingMs;
+    private List<AdminActivityItemDto> _activity = [];
+    private List<AdminUserDto> _users = [];
+    private List<AdminCategoryDto> _categories = [];
+    private List<AdminTemplateDto> _templates = [];
+
+    private string _promotePhone = "";
+    private string _newCategoryName = "";
+    private string _newTemplateName = "";
+    private string _newTemplateCategoryId = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -50,11 +259,205 @@
         {
             _isAdmin = false;
         }
+
+        if (_isAdmin)
+        {
+            try
+            {
+                await RefreshAllAsync();
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+            }
+        }
+
+        _loading = false;
+    }
+
+    private static string AbbrevPath(string p)
+    {
+        if (string.IsNullOrEmpty(p)) return "—";
+        return p.Length <= 48 ? p : p[..22] + "…" + p[^20..];
+    }
+
+    private async Task RefreshAllAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            _dash = await AdminApi.GetDashboardAsync();
+            _activity = await AdminApi.GetActivityAsync(60);
+            _users = await AdminApi.GetUsersAsync();
+            _categories = await AdminApi.GetCategoriesAsync();
+            _templates = await AdminApi.GetTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
         finally
         {
-            _loading = false;
+            _busy = false;
+        }
+    }
+
+    private async Task PingAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            _pingMs = await AdminApi.PingHealthMsAsync();
+        }
+        catch (Exception ex)
+        {
+            _pingMs = null;
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PromoteByPhoneAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_promotePhone)) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await AdminApi.PromoteByPhoneAsync(_promotePhone.Trim());
+            _promotePhone = "";
+            await RefreshAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToggleAdminAsync(AdminUserDto u, bool on)
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await AdminApi.SetUserAdminAsync(u.Id, on);
+            await RefreshAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddCategoryAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_newCategoryName)) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await AdminApi.CreateCategoryAsync(_newCategoryName.Trim(), 0);
+            _newCategoryName = "";
+            await RefreshAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PatchCategoryActiveAsync(int id, bool active)
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await AdminApi.PatchCategoryAsync(id, new AdminCategoryPatchRequest(IsActive: active));
+            await RefreshAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddTemplateAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_newTemplateName)) return;
+        int? cat = int.TryParse(_newTemplateCategoryId, out var cid) ? cid : null;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await AdminApi.CreateTemplateAsync(new AdminTemplateCreateRequest(
+                _newTemplateName.Trim(),
+                cat,
+                null,
+                null));
+            _newTemplateName = "";
+            _newTemplateCategoryId = "";
+            await RefreshAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PatchTemplateActiveAsync(int id, bool active)
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await AdminApi.PatchTemplateAsync(id, new AdminTemplatePatchRequest(IsActive: active));
+            await RefreshAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
     private void GoProfile() => Navigation.NavigateTo("/profile");
+
+    private static bool ParseCheckbox(ChangeEventArgs e) =>
+        e.Value is bool b
+            ? b
+            : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(e.Value?.ToString(), "on", StringComparison.OrdinalIgnoreCase);
 }

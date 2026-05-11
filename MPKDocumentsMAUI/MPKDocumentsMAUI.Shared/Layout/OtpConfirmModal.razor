@@ -1,9 +1,17 @@
 @* Модальное окно подтверждения OTP *@
+@using MPKDocumentsMAUI.Shared.Ui
 
 @if (IsVisible)
 {
     <div class="modal-overlay" @onclick="Close">
-        <div class="modal-card" @onclick:stopPropagation>
+        <div class="modal-card mpk-otp-modal-card" @onclick:stopPropagation>
+            @if (IsSubmitting)
+            {
+                <div class="mpk-otp-submit-overlay" aria-busy="true" aria-live="polite">
+                    <span class="mpk-spinner mpk-spinner--md" role="status" aria-label="Ожидание"></span>
+                    <div class="mpk-otp-submit-overlay__text">@SubmittingText</div>
+                </div>
+            }
             <div class="modal-body" style="padding-top:var(--spacing-xl)">
                 <div class="otp-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -49,6 +57,10 @@
                 {
                     <div class="otp-invalid-msg" role="alert">Неверный код!</div>
                 }
+                @if (!string.IsNullOrWhiteSpace(SubmitError) || !string.IsNullOrWhiteSpace(_modalSubmitError))
+                {
+                    <div class="otp-invalid-msg" role="alert" style="margin-top:10px">@(SubmitError ?? _modalSubmitError)</div>
+                }
             </div>
         </div>
     </div>
@@ -59,8 +71,11 @@
     [Parameter] public EventCallback OnClose { get; set; }
     /// <summary>Режим без проверки на API: передаёт код родителю (например создание документа).</summary>
     [Parameter] public EventCallback<string> OnConfirm { get; set; }
-    /// <summary>Если задано: вернуть false при неверном OTP, true при успехе или если родитель сам закрыл модалку / ошибка не OTP.</summary>
-    [Parameter] public Func<string, Task<bool>>? TrySubmitAsync { get; set; }
+    /// <summary>Если задано: результат попытки подписи/проверки кода (модалка не закрывается при <see cref="OtpSubmitResult.FailedRetryable"/>).</summary>
+    [Parameter] public Func<string, Task<OtpSubmitResult>>? TrySubmitAsync { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public string? SubmitError { get; set; }
+    [Parameter] public string SubmittingText { get; set; } = "Проверка кода и подписание…";
     [Parameter] public string DocumentName { get; set; } = "";
     [Parameter] public string PhoneHint { get; set; } = "";
 
@@ -74,6 +89,7 @@
     private ElementReference _r5;
 
     private bool _invalidCode;
+    private string? _modalSubmitError;
 
     private ElementReference RefAt(int index) => index switch
     {
@@ -91,6 +107,7 @@
 
     private async Task Close()
     {
+        if (IsSubmitting) return;
         ClearFormQuiet();
         await OnClose.InvokeAsync();
     }
@@ -105,6 +122,7 @@
     {
         Array.Fill(otpDigits, "");
         _invalidCode = false;
+        _modalSubmitError = null;
     }
 
     private static string OnlyDigits(string? s)
@@ -200,21 +218,33 @@
         {
             try
             {
-                var ok = await TrySubmitAsync(code);
-                if (!ok)
+                var r = await TrySubmitAsync(code);
+                if (r == OtpSubmitResult.InvalidCode)
                 {
                     _invalidCode = true;
+                    await InvokeAsync(StateHasChanged);
                     return;
                 }
-            }
-            catch
-            {
-                _invalidCode = true;
+
+                if (r == OtpSubmitResult.FailedRetryable)
+                {
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+
+                ClearFormQuiet();
+                await InvokeAsync(StateHasChanged);
                 return;
             }
-
-            ClearFormQuiet();
-            return;
+            catch (Exception ex)
+            {
+                _invalidCode = false;
+                _modalSubmitError = ex is OperationCanceledException
+                    ? "Превышено время ожидания ответа сервера."
+                    : "Сбой при отправке запроса. Повторите попытку.";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
         }
 
         await OnConfirm.InvokeAsync(code);

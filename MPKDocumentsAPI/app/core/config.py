@@ -118,6 +118,16 @@ class Settings(BaseSettings):
     # Уведомления о документах по SMTP (тот же канал, что OTP на email). Без SMTP — тихий no-op.
     document_notify_email_enabled: bool = True
 
+    # Доп. администраторы по id (через запятую), помимо Users.IsAdmin. Пример: "1,5"
+    mpk_admin_user_ids: str = Field(default="", validation_alias=AliasChoices("MPK_ADMIN_USER_IDS"))
+
+    @field_validator("mpk_admin_user_ids", mode="before")
+    @classmethod
+    def _strip_admin_ids(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @property
     def database_url(self) -> str:
         # asyncmy driver

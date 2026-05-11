@@ -4,6 +4,7 @@
 @using System.Globalization
 @using Microsoft.AspNetCore.Components.Routing
 @using MPKDocumentsMAUI.Shared.Api
+@using MPKDocumentsMAUI.Shared.Ui
 @inject IJSRuntime JS
 @inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
 @inject MPKDocumentsMAUI.Shared.Api.AuthApiClient AuthApi
@@ -255,8 +256,11 @@
 <OtpConfirmModal IsVisible="showOtp"
                  DocumentName="@(selectedDoc?.FileName ?? "")"
                  PhoneHint="@otpPhoneHint"
-                 OnClose="() => showOtp = false"
-                 TrySubmitAsync="TrySubmitHomeSignOtpAsync" />
+                 OnClose="CloseHomeOtpModal"
+                 TrySubmitAsync="TrySubmitHomeSignOtpAsync"
+                 IsSubmitting="homeSignOtpBusy"
+                 SubmitError="@homeOtpSubmitError"
+                 SubmittingText="Проверка кода и подписание документа…" />
 
 <SuccessModal IsVisible="showSuccess"
               DocumentName="@(selectedDoc?.FileName ?? "")"
@@ -279,6 +283,8 @@
     private bool showSuccess;
     private DocumentItem? selectedDoc;
     private string otpPhoneHint = "";
+    private bool homeSignOtpBusy;
+    private string? homeOtpSubmitError;
 
     private bool isLoading;
     private string? loadError;
@@ -464,10 +470,18 @@
 
     private void CloseDocModal() => showDocModal = false;
 
+    private void CloseHomeOtpModal()
+    {
+        if (homeSignOtpBusy) return;
+        showOtp = false;
+        homeOtpSubmitError = null;
+    }
+
     private async Task OnModalSign()
     {
         showDocModal = false;
         loadError = null;
+        homeOtpSubmitError = null;
         try
         {
             await AuthApi.SendOtpAsync();
@@ -479,50 +493,60 @@
         }
     }
 
-    private async Task<bool> TrySubmitHomeSignOtpAsync(string code)
+    private async Task<OtpSubmitResult> TrySubmitHomeSignOtpAsync(string code)
     {
-        if (selectedDoc is null) return true;
-        isLoading = true;
-        loadError = null;
+        if (selectedDoc is null)
+        {
+            homeOtpSubmitError = "Документ не выбран.";
+            return OtpSubmitResult.FailedRetryable;
+        }
+
+        homeSignOtpBusy = true;
+        homeOtpSubmitError = null;
+        await InvokeAsync(StateHasChanged);
+
+        OtpSubmitResult result;
         try
         {
             var outcome = await DocsApi.SignDocumentAsync(selectedDoc.Id, code);
             if (outcome.InvalidOtp)
-                return false;
-
-            if (!outcome.Ok || outcome.Data is null)
             {
-                loadError = "Ошибка подписи. Проверь соединение с API.";
-                showOtp = false;
-                await InvokeAsync(StateHasChanged);
-                return true;
+                result = OtpSubmitResult.InvalidCode;
             }
-
-            if (!outcome.Data.ok)
+            else if (!outcome.Ok || outcome.Data is null)
             {
-                loadError = "Не удалось подписать документ.";
-                showOtp = false;
-                await InvokeAsync(StateHasChanged);
-                return true;
+                homeOtpSubmitError = "Сервер не ответил или ответ не распознан. Повторите ввод кода.";
+                result = OtpSubmitResult.FailedRetryable;
             }
-
-            showOtp = false;
-            await InvokeAsync(StateHasChanged);
-            await Task.Delay(150);
-            showSuccess = true;
-            return true;
+            else if (outcome.Data.ok == false)
+            {
+                homeOtpSubmitError = "Подписание не выполнено (нет задания на подпись или документ уже обработан).";
+                result = OtpSubmitResult.FailedRetryable;
+            }
+            else
+            {
+                showOtp = false;
+                homeOtpSubmitError = null;
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(150);
+                showSuccess = true;
+                result = OtpSubmitResult.Succeeded;
+            }
         }
         catch (Exception ex)
         {
-            loadError = $"Подписание не выполнено: {ex.Message}";
-            showOtp = false;
-            await InvokeAsync(StateHasChanged);
-            return true;
+            homeOtpSubmitError = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Подписание не выполнено. Проверьте соединение с API."
+                : ex.Message;
+            result = OtpSubmitResult.FailedRetryable;
         }
         finally
         {
-            isLoading = false;
+            homeSignOtpBusy = false;
         }
+
+        await InvokeAsync(StateHasChanged);
+        return result;
     }
 
     private void OnSuccessClosed() => showSuccess = false;

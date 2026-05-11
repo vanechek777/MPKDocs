@@ -12,6 +12,7 @@ from sqlalchemy.types import Text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.audit import log_user_activity
 from app.db.models import (
     Department,
     Document,
@@ -135,6 +136,7 @@ async def create_document(
 
     # If draft - do not create signing tasks yet (won't appear in inbox).
     if payload.save_as_draft:
+        await log_user_activity(db, user_id=int(user.id), action="DOC_CREATE_DRAFT", detail=str(doc.id))
         await db.commit()
         return CreateDocumentResponse(document_id=doc.id, status=doc.Status or "DRAFT")
 
@@ -184,6 +186,7 @@ async def create_document(
             )
         )
 
+    await log_user_activity(db, user_id=int(user.id), action="DOC_CREATE", detail=str(doc.id))
     await db.commit()
     fire_notify_turn(doc.id)
     return CreateDocumentResponse(document_id=doc.id, status=doc.Status or "IN_PROGRESS")
@@ -840,21 +843,18 @@ async def get_document_detail(
 
     signers: list[SignerNode] = []
     signed_count = 0
-    my_task_status: str | None = None
+    my_status_for_user: list[str] = []
     for t in tasks:
         status = t.Status or "PENDING"
         if status == "SIGNED":
             signed_count += 1
-        if my_task_status is None and (
-            t.AssignedUserId == user.id
-            or (
-                t.AssignedUserId is None
-                and t.AssignedDepartmentId is not None
-                and user.DepartmentId is not None
-                and t.AssignedDepartmentId == user.DepartmentId
-            )
+        if t.AssignedUserId == user.id or (
+            t.AssignedUserId is None
+            and t.AssignedDepartmentId is not None
+            and user.DepartmentId is not None
+            and t.AssignedDepartmentId == user.DepartmentId
         ):
-            my_task_status = status
+            my_status_for_user.append(status)
         sig_type = None
         if status == "SIGNED" and t.ProcessedByUserId is not None:
             uid = int(t.ProcessedByUserId)
@@ -882,6 +882,15 @@ async def get_document_detail(
                 signature_type=sig_type,
             )
         )
+
+    my_task_status: str | None = None
+    if my_status_for_user:
+        if any(s == "SIGNED" for s in my_status_for_user):
+            my_task_status = "SIGNED"
+        elif any(s == "REJECTED" for s in my_status_for_user):
+            my_task_status = "REJECTED"
+        else:
+            my_task_status = my_status_for_user[0]
 
     total_signers = len(tasks)
     st_up = (doc.Status or "").upper()
@@ -1040,10 +1049,11 @@ async def sign_document(
     else:
         doc.Status = doc.Status or "IN_PROGRESS"
 
+    await log_user_activity(db, user_id=int(user.id), action="DOC_SIGN", detail=str(document_id))
     await db.commit()
     fire_notify_initiator(document_id, user.id, event="signed", document_status=doc.Status)
     fire_notify_turn(document_id)
-    return ActionResponse(document_id=document_id, document_status=doc.Status)
+    return ActionResponse(ok=True, document_id=document_id, document_status=doc.Status)
 
 
 @router.post("/{document_id}/actions/reject", response_model=ActionResponse)
@@ -1065,9 +1075,10 @@ async def reject_document(
     doc = (await db.execute(select(Document).where(Document.id == document_id))).scalar_one()
     doc.Status = "REJECTED"
 
+    await log_user_activity(db, user_id=int(user.id), action="DOC_REJECT", detail=str(document_id))
     await db.commit()
     fire_notify_initiator(document_id, user.id, event="rejected", document_status=doc.Status)
-    return ActionResponse(document_id=document_id, document_status=doc.Status)
+    return ActionResponse(ok=True, document_id=document_id, document_status=doc.Status)
 
 
 @router.post("/{document_id}/actions/cancel", response_model=ActionResponse)
@@ -1101,6 +1112,7 @@ async def cancel_document(
         t.ProcessedByUserId = user.id
         t.ProcessedAt = datetime.now(tz=timezone.utc).replace(tzinfo=None)
 
+    await log_user_activity(db, user_id=int(user.id), action="DOC_CANCEL", detail=str(document_id))
     await db.commit()
-    return ActionResponse(document_id=document_id, document_status=doc.Status)
+    return ActionResponse(ok=True, document_id=document_id, document_status=doc.Status)
 

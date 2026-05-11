@@ -14,6 +14,7 @@
 @using Microsoft.AspNetCore.Components.Routing
 @using System.Text.Json
 @using System.Globalization
+@using System.Threading
 @inject IJSRuntime JS
 
 <PageTitle>Создание нового документа — МПК Документы</PageTitle>
@@ -61,6 +62,13 @@
             </button>
         </div>
         <p class="wizard-subtitle" style="margin-top:-6px">Выберите тип документа:</p>
+        @if (TemplatesInCategory.Count == 0)
+        {
+            <div class="auth-error" style="margin-bottom:14px;background:rgba(124,25,25,0.18);border-color:rgba(255,255,255,0.12)">
+                В категории «<strong>@selectedCategory</strong>» пока нет ни одного <strong>типа документа (шаблона)</strong>.
+                В админ-панели откройте «Типы документов» и добавьте шаблон с привязкой к этой категории (или без категории — тогда укажите ту же строку в поле категории у шаблона).
+            </div>
+        }
         <div class="category-grid">
             @foreach (var t in TemplatesInCategory)
             {
@@ -142,6 +150,13 @@
                     @* Чтобы не было двух "названий": title/fileName берём из общего поля ниже *@
                     if (string.Equals(f.Name, "title", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(f.Name, "fileName", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    @* Номер из схемы часто пустой шум рядом с именем файла; если в шаблоне он обязателен — показываем. *@
+                    if (!f.Required &&
+                        (string.Equals(f.Name, "docNumber", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(f.Name, "documentNumber", StringComparison.OrdinalIgnoreCase)))
                     {
                         continue;
                     }
@@ -374,7 +389,7 @@
                 <button class="btn btn-green" disabled="@isSaving" @onclick="SubmitDocument">
                     @if (isSaving)
                     {
-                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>Отправляем…</span></span>
+                        <span class="mpk-btn-loading"><span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span><span>@SubmitButtonWaitText</span></span>
                     }
                     else
                     {
@@ -384,6 +399,25 @@
                 <button class="btn btn-secondary" disabled="@isSaving" @onclick="() => currentStep = 3">Изменить</button>
                 <button class="btn btn-red" disabled="@isSaving" @onclick="CancelAndExit">Отменить</button>
             </div>
+            @if (isSaving)
+            {
+                <div class="mpk-server-send-panel" style="margin-top:16px;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);max-width:560px">
+                    <div style="font-size:14px;font-weight:600;color:var(--text-primary,#f0f0f0)">@SubmitProgressTitle</div>
+                    @if (!string.IsNullOrEmpty(SubmitProgressSubtitle))
+                    {
+                        <div style="margin-top:8px;font-size:12px;line-height:1.45;color:var(--text-secondary,#aaa)">@SubmitProgressSubtitle</div>
+                    }
+                    @if (_serverSendPhase == ServerSendPhase.UploadingFile && _uploadProgressTotal > 0)
+                    {
+                        <div style="margin-top:12px;font-size:12px;color:var(--text-secondary,#aaa)">
+                            @FormatBytes(_uploadProgressRead) из @FormatBytes(_uploadProgressTotal) (@UploadProgressPercent%)
+                        </div>
+                        <div style="margin-top:8px;height:8px;background:rgba(255,255,255,0.12);border-radius:4px;overflow:hidden">
+                            <div style="@($"height:100%;width:{UploadProgressPercent}%;background:#3d9e5c;transition:width 0.15s ease")"></div>
+                        </div>
+                    }
+                </div>
+            }
         </div>
     }
     }
@@ -433,6 +467,37 @@
     private bool isLoading;
     private bool isSaving;
     private string? loadError;
+
+    private enum ServerSendPhase { None, CreatingRecord, UploadingFile }
+    private ServerSendPhase _serverSendPhase;
+    private long _uploadProgressRead;
+    private long _uploadProgressTotal;
+
+    private string SubmitButtonWaitText => _serverSendPhase switch
+    {
+        ServerSendPhase.CreatingRecord => "Создаём документ на сервере…",
+        ServerSendPhase.UploadingFile => "Загружаем файл на сервер…",
+        _ => "Отправляем…",
+    };
+
+    private string SubmitProgressTitle => _serverSendPhase switch
+    {
+        ServerSendPhase.CreatingRecord => "Шаг 1: запись документа и маршрут подписания",
+        ServerSendPhase.UploadingFile => "Шаг 2: загрузка вложения на сервер",
+        _ => "Связь с сервером",
+    };
+
+    private string SubmitProgressSubtitle => _serverSendPhase switch
+    {
+        ServerSendPhase.CreatingRecord => "Создаётся запись в базе и цепочка задач подписантов. Обычно это быстро.",
+        ServerSendPhase.UploadingFile => "Идёт отправка файла (PDF/DOC). На этом шаге уходит больше времени, чем на создание карточки — особенно при медленной сети или большом файле.",
+        _ => "",
+    };
+
+    private int UploadProgressPercent =>
+        _uploadProgressTotal > 0
+            ? (int)Math.Clamp(100.0 * _uploadProgressRead / _uploadProgressTotal, 0, 100)
+            : 0;
     private bool showOtp;
     private string otpPhoneHint = "";
     private string? otpCode;
@@ -467,6 +532,8 @@
 
     private record TemplateOption(int Id, string Name, string? Category);
     private List<TemplateOption> templates = new();
+    /// <summary>Категории из справочника БД (активные), в т.ч. без ни одного шаблона.</summary>
+    private List<string> _dbCategoryNames = new();
 
     private record SchemaField(string Name, string Label, string Type, bool Required, List<string>? Options, string? Placeholder, bool Multiline);
     private List<SchemaField> schemaFields = new();
@@ -498,17 +565,37 @@
 
     private string SelectedTemplateName => templates.FirstOrDefault(x => x.Id == selectedTemplateId)?.Name ?? "Документ";
 
-    private List<string> Categories => templates
-        .Select(t => t.Category)
-        .Where(c => !string.IsNullOrWhiteSpace(c))
-        .Select(c => c!)
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .OrderBy(x => x)
-        .ToList();
+    private List<string> Categories
+    {
+        get
+        {
+            var fromDb = _dbCategoryNames.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim());
+            var fromTpl = templates
+                .Select(EffectiveTemplateCategory)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c!);
+            var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+            var ordered = new List<string>();
+            foreach (var n in fromDb)
+            {
+                var k = NormalizeCategoryKey(n);
+                if (string.IsNullOrEmpty(k)) continue;
+                if (seenKeys.Add(k))
+                    ordered.Add(n);
+            }
+            foreach (var n in fromTpl.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                var k = NormalizeCategoryKey(n);
+                if (string.IsNullOrEmpty(k)) continue;
+                if (seenKeys.Add(k))
+                    ordered.Add(n);
+            }
+            return ordered;
+        }
+    }
 
     private List<TemplateOption> TemplatesInCategory => templates
-        .Where(t => !string.IsNullOrWhiteSpace(selectedCategory) &&
-                    string.Equals(t.Category, selectedCategory, StringComparison.OrdinalIgnoreCase))
+        .Where(t => TemplateMatchesCategory(t, selectedCategory))
         .ToList();
 
     private List<string> SelectedSignerLabels => selectedSigners
@@ -565,6 +652,7 @@
         await TryRestorePrecategoryFromStorageAsync();
         if (_pendingResumeDraftId is int resumeId)
             await ResumeDraftFromServerAsync(resumeId);
+        CanonicalizeSelectedCategory();
 
         _locationChangingRegistration?.Dispose();
         _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChangingAsync);
@@ -601,6 +689,15 @@
         {
             var t = await DocsApi.ListTemplatesAsync(activeOnly: true);
             templates = t.Select(x => new TemplateOption(x.id, x.name, x.category ?? InferCategoryFromName(x.name))).ToList();
+
+            try
+            {
+                _dbCategoryNames = await DocsApi.ListTemplateCategoryNamesAsync();
+            }
+            catch
+            {
+                _dbCategoryNames = new();
+            }
 
             var u = await DocsApi.ListUsersAsync(activeOnly: true);
             allSigners = u
@@ -749,12 +846,10 @@
         selectedDepartmentId = null;
         // Если у категории только один тип — пропускаем шаг выбора типа
         var single = templates
-            .Where(t => !string.IsNullOrWhiteSpace(t.Category) &&
-                        string.Equals(t.Category, cat, StringComparison.OrdinalIgnoreCase))
+            .Where(t => TemplateMatchesCategory(t, cat))
             .Select(t => (int?)t.Id)
             .FirstOrDefault();
-        var count = templates.Count(t => !string.IsNullOrWhiteSpace(t.Category) &&
-                                         string.Equals(t.Category, cat, StringComparison.OrdinalIgnoreCase));
+        var count = templates.Count(t => TemplateMatchesCategory(t, cat));
 
         if (count == 1 && single is not null)
         {
@@ -1007,12 +1102,21 @@
         };
     }
 
-    private async Task UploadAttachmentIfNeededAsync(int documentId)
+    private async Task UploadAttachmentIfNeededAsync(
+        int documentId,
+        CancellationToken ct = default,
+        IProgress<(long bytesSent, long bytesTotal)>? uploadProgress = null)
     {
         if (_pickedFileBytes is not { Length: > 0 }) return;
         if (string.IsNullOrWhiteSpace(fileName)) return;
-        await using var ms = new MemoryStream(_pickedFileBytes);
-        await DocsApi.UploadDocumentFileAsync(documentId, ms, fileName, GuessMimeForFilename(fileName));
+        await using var ms = new MemoryStream(_pickedFileBytes, writable: false);
+        await DocsApi.UploadDocumentFileAsync(
+            documentId,
+            ms,
+            fileName,
+            GuessMimeForFilename(fileName),
+            ct,
+            uploadProgress);
     }
 
     private static string FormatBytes(long bytes)
@@ -1043,6 +1147,41 @@
         if (n.StartsWith("Отчет", StringComparison.OrdinalIgnoreCase)) return "Отчет";
         if (n.StartsWith("Приказ", StringComparison.OrdinalIgnoreCase)) return "Приказ";
         return null;
+    }
+
+    /// <summary>
+    /// Одна «логическая» категория для сравнения: ё→е, «Отчет»/«Отчёты»/«Отчеты» в один бакет, то же для приказов.
+    /// </summary>
+    private static string NormalizeCategoryKey(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return "";
+        var t = s.Trim().ToLowerInvariant().Replace('ё', 'е');
+        if (t.StartsWith("отчет", StringComparison.Ordinal)) return "bucket:reports";
+        if (t.StartsWith("приказ", StringComparison.Ordinal)) return "bucket:orders";
+        return "bucket:" + t;
+    }
+
+    private static string? EffectiveTemplateCategory(TemplateOption t) =>
+        t.Category ?? InferCategoryFromName(t.Name);
+
+    private static bool TemplateMatchesCategory(TemplateOption t, string? selectedCategoryLabel)
+    {
+        if (string.IsNullOrWhiteSpace(selectedCategoryLabel)) return false;
+        var sel = NormalizeCategoryKey(selectedCategoryLabel);
+        if (string.IsNullOrEmpty(sel)) return false;
+        var tpl = NormalizeCategoryKey(EffectiveTemplateCategory(t));
+        if (string.IsNullOrEmpty(tpl)) return false;
+        return sel == tpl;
+    }
+
+    private void CanonicalizeSelectedCategory()
+    {
+        if (string.IsNullOrWhiteSpace(selectedCategory)) return;
+        var k = NormalizeCategoryKey(selectedCategory);
+        if (string.IsNullOrEmpty(k)) return;
+        var match = Categories.FirstOrDefault(c => NormalizeCategoryKey(c) == k);
+        if (!string.IsNullOrEmpty(match))
+            selectedCategory = match;
     }
 
     private static string HumanizeFieldName(string name)
@@ -1113,6 +1252,7 @@
         if (isSaving) return;
         isSaving = true;
         loadError = null;
+        _suppressDraftSave = true;
         try
         {
             var payload = BuildDraftContentForApi();
@@ -1136,11 +1276,11 @@
 
             await UploadAttachmentIfNeededAsync(docId);
             await ClearPrecategoryStorageAsync();
-            _suppressDraftSave = true;
             Navigation.NavigateTo($"/document/{docId}?from=create", replace: true);
         }
         catch
         {
+            _suppressDraftSave = false;
             loadError = "Не удалось сохранить черновик.";
         }
         finally
@@ -1172,6 +1312,14 @@
         }
         if (isSaving) return;
         isSaving = true;
+        _serverSendPhase = ServerSendPhase.CreatingRecord;
+        _uploadProgressRead = 0;
+        _uploadProgressTotal = 0;
+        await InvokeAsync(StateHasChanged);
+        // До любых await: иначе RegisterLocationChangingHandler может вызвать PreventNavigation() и «съесть» переход на /document/{id}.
+        _suppressDraftSave = true;
+        using var submitCts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        var ct = submitCts.Token;
         try
         {
             var signerIds = selectedSigners.ToList();
@@ -1182,19 +1330,52 @@
                 BuildContent(),
                 signerIds,
                 signerDepartmentId: assignMode == AssignMode.Department ? selectedDepartmentId : null,
-                saveAsDraft: false);
-            await UploadAttachmentIfNeededAsync(res.document_id);
-            _suppressDraftSave = true;
+                saveAsDraft: false,
+                ct);
+
+            IProgress<(long, long)>? uploadProgress = null;
+            if (_pickedFileBytes is { Length: > 0 })
+            {
+                _serverSendPhase = ServerSendPhase.UploadingFile;
+                _uploadProgressTotal = _pickedFileBytes.LongLength;
+                _uploadProgressRead = 0;
+                uploadProgress = new Progress<(long, long)>(p =>
+                {
+                    _uploadProgressRead = p.Item1;
+                    _uploadProgressTotal = p.Item2;
+                    _ = InvokeAsync(StateHasChanged);
+                });
+                await InvokeAsync(StateHasChanged);
+            }
+
+            try
+            {
+                await UploadAttachmentIfNeededAsync(res.document_id, ct, uploadProgress);
+            }
+            catch
+            {
+                // Документ уже создан в БД — всё равно открываем карточку; файл при необходимости загрузят позже.
+            }
+
             Navigation.NavigateTo($"/document/{res.document_id}?from=create", replace: true);
+        }
+        catch (OperationCanceledException)
+        {
+            _suppressDraftSave = false;
+            loadError = "Превышено время ожидания ответа сервера. Проверь сеть и что API запущено.";
         }
         catch (Exception ex)
         {
+            _suppressDraftSave = false;
             loadError = string.IsNullOrWhiteSpace(ex.Message)
                 ? "Не удалось отправить документ. Проверь, что API запущено."
                 : $"Не удалось отправить документ: {ex.Message}";
         }
         finally
         {
+            _serverSendPhase = ServerSendPhase.None;
+            _uploadProgressRead = 0;
+            _uploadProgressTotal = 0;
             isSaving = false;
         }
     }

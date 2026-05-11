@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using MPKDocumentsMAUI.Shared.Auth;
+using MPKDocumentsMAUI.Shared.Utilities;
 
 namespace MPKDocumentsMAUI.Shared.Api;
 
@@ -22,6 +23,31 @@ public sealed class DocumentsApiClient
     }
 
     private Uri U(string path) => new(new Uri(_options.BaseUrl.TrimEnd('/') + "/"), path.TrimStart('/'));
+
+    private static async Task<byte[]> ReadHttpContentWithProgressAsync(
+        HttpContent content,
+        IProgress<(long BytesRead, long? ContentLength)>? progress,
+        CancellationToken ct)
+    {
+        var total = content.Headers.ContentLength;
+        progress?.Report((0, total));
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        const int bufLen = 81920;
+        var buffer = new byte[bufLen];
+        using var ms = new MemoryStream(total is > 0 and <= int.MaxValue ? (int)total : 0);
+        long read = 0;
+        while (true)
+        {
+            var n = await stream.ReadAsync(buffer.AsMemory(0, bufLen), ct);
+            if (n == 0)
+                break;
+            await ms.WriteAsync(buffer.AsMemory(0, n), ct);
+            read += n;
+            progress?.Report((read, total));
+        }
+
+        return ms.ToArray();
+    }
 
     private async Task AttachAuthAsync()
     {
@@ -71,6 +97,15 @@ public sealed class DocumentsApiClient
         var res = await _http.GetAsync(U(path), ct);
         res.EnsureSuccessStatusCode();
         return (await res.Content.ReadFromJsonAsync<List<TemplateListItemDto>>(cancellationToken: ct)) ?? new();
+    }
+
+    /// <summary>Имена активных категорий из БД (в т.ч. без шаблонов).</summary>
+    public async Task<List<string>> ListTemplateCategoryNamesAsync(CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.GetAsync(U("/templates/category-names"), ct);
+        res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<List<string>>(cancellationToken: ct)) ?? new();
     }
 
     public async Task<TemplateDetailDto> GetTemplateAsync(int templateId, CancellationToken ct = default)
@@ -214,7 +249,14 @@ public sealed class DocumentsApiClient
         );
 
         if (res.StatusCode == HttpStatusCode.BadRequest)
-            return new SignDocumentResult(Ok: false, InvalidOtp: true, Data: null);
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            var looksLikeOtp =
+                body.Contains("Invalid", StringComparison.OrdinalIgnoreCase)
+                || body.Contains("expired", StringComparison.OrdinalIgnoreCase)
+                || body.Contains("код", StringComparison.OrdinalIgnoreCase);
+            return new SignDocumentResult(Ok: false, InvalidOtp: looksLikeOtp, Data: null);
+        }
 
         if (!res.IsSuccessStatusCode)
             return new SignDocumentResult(Ok: false, InvalidOtp: false, Data: null);
@@ -259,13 +301,19 @@ public sealed class DocumentsApiClient
         return (await res.Content.ReadFromJsonAsync<ActionResponseDto>(cancellationToken: ct))!;
     }
 
-    public async Task<(byte[] Body, string? ContentType)> DownloadDocumentFileAsync(int documentId, CancellationToken ct = default)
+    public async Task<(byte[] Body, string? ContentType)> DownloadDocumentFileAsync(
+        int documentId,
+        CancellationToken ct = default,
+        IProgress<(long BytesRead, long? ContentLength)>? downloadProgress = null)
     {
         await AttachAuthAsync();
-        var res = await _http.GetAsync(U($"/documents/{documentId}/file"), ct);
+        using var res = await _http.GetAsync(
+            U($"/documents/{documentId}/file"),
+            HttpCompletionOption.ResponseHeadersRead,
+            ct);
         res.EnsureSuccessStatusCode();
         var media = res.Content.Headers.ContentType?.MediaType;
-        var body = await res.Content.ReadAsByteArrayAsync(ct);
+        var body = await ReadHttpContentWithProgressAsync(res.Content, downloadProgress, ct);
         return (body, media);
     }
 
@@ -274,11 +322,15 @@ public sealed class DocumentsApiClient
         Stream fileStream,
         string fileName,
         string? contentType,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IProgress<(long bytesSent, long bytesTotal)>? uploadProgress = null)
     {
         await AttachAuthAsync();
         using var form = new MultipartFormDataContent();
-        var streamContent = new StreamContent(fileStream);
+        Stream body = fileStream;
+        if (uploadProgress is not null && fileStream.CanSeek && fileStream.Length > 0)
+            body = new ProgressReportingReadStream(fileStream, fileStream.Length, uploadProgress);
+        using var streamContent = new StreamContent(body);
         if (!string.IsNullOrWhiteSpace(contentType))
             streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         form.Add(streamContent, "file", fileName);
@@ -286,12 +338,18 @@ public sealed class DocumentsApiClient
         res.EnsureSuccessStatusCode();
     }
 
-    public async Task<byte[]> DownloadMyNepEsigAsync(int documentId, CancellationToken ct = default)
+    public async Task<byte[]> DownloadMyNepEsigAsync(
+        int documentId,
+        CancellationToken ct = default,
+        IProgress<(long BytesRead, long? ContentLength)>? downloadProgress = null)
     {
         await AttachAuthAsync();
-        var res = await _http.GetAsync(U($"/documents/{documentId}/nep-signature.esig"), ct);
+        using var res = await _http.GetAsync(
+            U($"/documents/{documentId}/nep-signature.esig"),
+            HttpCompletionOption.ResponseHeadersRead,
+            ct);
         res.EnsureSuccessStatusCode();
-        return await res.Content.ReadAsByteArrayAsync(ct);
+        return await ReadHttpContentWithProgressAsync(res.Content, downloadProgress, ct);
     }
 
     public async Task<VerifyEsigResponseDto> VerifyEsigAsync(Stream esigStream, CancellationToken ct = default)
