@@ -13,7 +13,7 @@ public static class HttpApiErrorFormatter
         {
             return
                 "Сервер вернул 404: по этому адресу нет API (часто туннель выключен или неверный URL). "
-                + "Укажите рабочий адрес бэкенда: в MAUI — файл Resources/Raw/appsettings.json (ключ Api:BaseUrl), "
+                + "Укажите рабочий адрес бэкенда: в MAUI — файл Resources/Raw/appsettings.txt (JSON, ключ Api:BaseUrl), "
                 + "в веб-проекте — appsettings.json. Пример для локального API: http://localhost:8000";
         }
 

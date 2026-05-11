@@ -32,7 +32,7 @@ namespace MPKDocumentsMAUI
 
             builder.Services.AddMauiBlazorWebView();
 
-            // API + auth: BaseUrl из Resources/Raw/appsettings.json (ключ Api:BaseUrl), иначе дефолт в ApiOptions.
+            // API + auth: BaseUrl из Resources/Raw/appsettings.txt (JSON, ключ Api:BaseUrl). Расширение .txt — обход dotnet/maui#17078 (iOS/macOS не принимают .json в MauiAsset).
             // Эмулятор Android к хосту: http://10.0.2.2:8000
             builder.Services.AddSingleton(LoadApiOptionsFromAppPackage());
             // Явный таймаут: иначе при «молчащем» API кнопка «Отправляем…» висит бесконечно.
@@ -60,7 +60,7 @@ namespace MPKDocumentsMAUI
         {
             try
             {
-                using var stream = FileSystem.OpenAppPackageFileAsync("appsettings.json").GetAwaiter().GetResult();
+                using var stream = FileSystem.OpenAppPackageFileAsync("appsettings.txt").GetAwaiter().GetResult();
                 using var doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.TryGetProperty("Api", out var api) &&
                     api.TryGetProperty("BaseUrl", out var urlEl))
