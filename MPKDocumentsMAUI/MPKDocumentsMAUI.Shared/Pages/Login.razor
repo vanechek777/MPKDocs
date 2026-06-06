@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@using MPKDocumentsMAUI.Shared.Api
 
 <div class="auth-page">
     <div class="auth-card">
@@ -44,8 +45,7 @@
         {
             <div class="form-group">
                 <label class="form-label">Телефон</label>
-                <InputText class="form-input" type="tel" autocomplete="username"
-                           @bind-Value="_phone" placeholder="+79990000000" />
+                <PhoneInput @bind-Value="_phone" Autocomplete="username" />
                 <div class="form-hint-muted">Тот же номер, что при регистрации.</div>
             </div>
 
@@ -168,9 +168,9 @@
     {
         if (_busyPasswordLogin) return;
         _error = null;
-        if (string.IsNullOrWhiteSpace(_phone))
+        if (!PhoneDisplay.IsCompleteRu(_phone))
         {
-            _error = "Укажите номер телефона.";
+            _error = "Укажите полный номер телефона в формате +7 (XXX) XXX-XX-XX.";
             return;
         }
         if (string.IsNullOrWhiteSpace(_password))
@@ -187,9 +187,7 @@
         }
         catch (Exception ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message)
-                ? "Неверный телефон или пароль."
-                : ex.Message;
+            _error = HttpApiErrorFormatter.HumanizeException(ex);
         }
         finally
         {
@@ -222,7 +220,7 @@
         }
         catch (Exception ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message) ? "Не удалось отправить код. Проверь API и email." : ex.Message;
+            _error = HttpApiErrorFormatter.HumanizeException(ex);
         }
         finally
         {
@@ -248,9 +246,7 @@
         }
         catch (Exception ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message)
-                ? "Неверный или просроченный код."
-                : ex.Message;
+            _error = HttpApiErrorFormatter.HumanizeException(ex);
         }
         finally
         {

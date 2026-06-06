@@ -35,6 +35,11 @@ public sealed class ApiAuthenticationStateProvider : AuthenticationStateProvider
             };
             if (!string.IsNullOrWhiteSpace(me.email))
                 claims.Add(new Claim(ClaimTypes.Email, me.email!));
+            if (me.is_admin)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, "admin"));
+                claims.Add(new Claim("is_admin", "true"));
+            }
 
             var identity = new ClaimsIdentity(claims, authenticationType: "jwt");
             return new AuthenticationState(new ClaimsPrincipal(identity));

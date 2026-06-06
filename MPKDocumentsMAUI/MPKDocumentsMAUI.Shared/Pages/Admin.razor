@@ -2,8 +2,14 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject NavigationManager Navigation
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
-@inject MPKDocumentsMAUI.Shared.Api.ApiOptions ApiOptions
+@inject MPKDocumentsMAUI.Shared.Api.IApiEndpointStore ApiEndpoints
+@implements IAsyncDisposable
 @inject MPKDocumentsMAUI.Shared.Api.AdminApiClient AdminApi
+@inject IApiPingLiveService PingLive
+@inject MPKDocumentsMAUI.Shared.Services.IFileDownloadService FileDownload
+@inject StaffRegisterApiClient StaffApi
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
 
 <PageTitle>Админ-панель — МПК Документы</PageTitle>
 
@@ -46,8 +52,8 @@
             </div>
             <div class="admin-stat">
                 <div class="admin-stat-label">Клиент → /health</div>
-                <div class="admin-stat-value">@(_pingMs.HasValue ? $"{_pingMs} мс" : "—")</div>
-                <div class="admin-stat-sub">без авторизации</div>
+                <div class="admin-stat-value">@FormatActivePingMs()</div>
+                <div class="admin-stat-sub">без авторизации · обновление каждые 2 с</div>
             </div>
             <div class="admin-stat">
                 <div class="admin-stat-label">Время на сервере (UTC)</div>
@@ -78,7 +84,13 @@
         </div>
 
         <div class="profile-section admin-section">
-            <div class="profile-section-title">Журнал действий</div>
+            <div class="admin-section-head">
+                <div class="profile-section-title" style="margin:0">Журнал действий</div>
+                <button type="button" class="btn btn-secondary btn-sm" disabled="@_busy" @onclick="OpenActivityModalAsync">
+                    Все операции…
+                </button>
+            </div>
+            <p class="admin-hint">На странице — последние @_activityPreviewLimit записей. Полный список (до @_activityModalLimit) и выгрузка в .txt — в отдельном окне.</p>
             <div class="admin-table-wrap">
                 <table class="admin-table">
                     <thead>
@@ -90,10 +102,14 @@
                     </tr>
                     </thead>
                     <tbody>
-                    @foreach (var a in _activity)
+                    @if (_activityPreview.Count == 0)
+                    {
+                        <tr><td colspan="4" class="admin-muted">Записей пока нет.</td></tr>
+                    }
+                    @foreach (var a in _activityPreview)
                     {
                         <tr>
-                            <td class="admin-nowrap">@(a.CreatedAt ?? "—")</td>
+                            <td class="admin-nowrap">@FormatActivityTime(a.CreatedAt)</td>
                             <td>@(string.IsNullOrEmpty(a.UserName) ? (a.UserId?.ToString() ?? "—") : a.UserName)</td>
                             <td><code class="admin-code">@a.Action</code></td>
                             <td class="admin-detail">@(a.Detail ?? "—")</td>
@@ -222,13 +238,120 @@
         </div>
 
         <div class="profile-section admin-section">
+            <div class="profile-section-title">Кадровый справочник (1С / Excel)</div>
+            <p class="admin-hint">
+                Записи справочника используются при регистрации: ФИО, должность и отдел должны совпадать с импортом.
+                Сейчас в справочнике: <strong>@_staffStats?.StaffTotal.ToString() ?? "—"</strong> сотрудников.
+            </p>
+
+            <div class="admin-onec-wizard">
+                <div class="admin-section-subtitle">Мастер подключения 1С</div>
+                <div class="admin-inline-form admin-inline-form--wrap">
+                    <InputText class="form-input" placeholder="https://1c.company.local/odata" @bind-Value="_onecBaseUrl" />
+                    <InputText class="form-input" placeholder="Логин" @bind-Value="_onecUsername" />
+                    <InputText class="form-input" type="password" placeholder="Пароль (оставьте пустым, чтобы не менять)" @bind-Value="_onecPassword" />
+                    <button type="button" class="btn btn-secondary btn-sm" disabled="@_staffBusy" @onclick="SaveOneCConfigAsync">Сохранить</button>
+                    <button type="button" class="btn btn-outline btn-sm" disabled="@_staffBusy" @onclick="TestOneCAsync">Проверить</button>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_onecTestMessage))
+                {
+                    <p class="admin-hint @(_onecTestOk ? "admin-hint--ok" : "admin-hint--bad")">@_onecTestMessage</p>
+                }
+            </div>
+
+            <div class="admin-import-row">
+                <div class="admin-section-subtitle">Импорт из Excel / CSV</div>
+                <p class="admin-hint">Колонки: <strong>ФИО</strong>, <strong>Должность</strong>, <strong>Отдел</strong> (первая строка — заголовки).</p>
+                <InputFile OnChange="OnStaffFileSelected" accept=".csv,.xlsx,.xlsm" disabled="@_staffBusy" />
+                @if (!string.IsNullOrWhiteSpace(_staffImportMessage))
+                {
+                    <p class="admin-hint">@_staffImportMessage</p>
+                }
+            </div>
+        </div>
+
+        <div id="api-hosts" class="profile-section admin-section">
             <div class="profile-section-title">Базовый URL API (клиент)</div>
-            <p class="admin-code">@ApiOptions.BaseUrl</p>
+            <ApiEndpointSettings AllowManageEndpoints="true" />
         </div>
     }
 </div>
 
+@if (_showActivityModal)
+{
+    <div class="modal-overlay" @onclick="CloseActivityModal">
+        <div class="modal-card admin-activity-modal" @onclick:stopPropagation="true">
+            <div class="modal-header">Журнал действий</div>
+            <div class="modal-body">
+                <p class="admin-hint" style="padding-top:0;margin-top:0">
+                    До @_activityModalLimit последних операций. Для выгрузки укажите период (необязательно) и нажмите «Скачать .txt».
+                </p>
+                <div class="admin-activity-export-row">
+                    <label class="admin-activity-date-label">
+                        <span>С</span>
+                        <input type="date" class="form-input" @bind="_exportFrom" disabled="@_activityModalBusy" />
+                    </label>
+                    <label class="admin-activity-date-label">
+                        <span>По</span>
+                        <input type="date" class="form-input" @bind="_exportTo" disabled="@_activityModalBusy" />
+                    </label>
+                    <button type="button" class="btn btn-green btn-sm" disabled="@_activityModalBusy" @onclick="ExportActivityTxtAsync">
+                        Скачать .txt
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" disabled="@_activityModalBusy" @onclick="ReloadActivityModalAsync">
+                        Обновить список
+                    </button>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_activityModalError))
+                {
+                    <p class="admin-activity-modal-error">@_activityModalError</p>
+                }
+                @if (_activityModalBusy)
+                {
+                    <div class="verify-nep-busy" style="margin:12px 0"><LoadingSpinner Size="sm" Caption="Загрузка…" /></div>
+                }
+                <div class="admin-table-wrap admin-activity-modal-table">
+                    <table class="admin-table">
+                        <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Пользователь</th>
+                            <th>Действие</th>
+                            <th>Детали</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @if (!_activityModalBusy && _activityModal.Count == 0)
+                        {
+                            <tr><td colspan="4" class="admin-muted">Нет записей за выбранные условия.</td></tr>
+                        }
+                        @foreach (var a in _activityModal)
+                        {
+                            <tr>
+                                <td class="admin-nowrap">@FormatActivityTime(a.CreatedAt)</td>
+                                <td>@(string.IsNullOrEmpty(a.UserName) ? (a.UserId?.ToString() ?? "—") : a.UserName)</td>
+                                <td><code class="admin-code">@a.Action</code></td>
+                                <td class="admin-detail">@(a.Detail ?? "—")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_activityModal.Count >= _activityModalLimit)
+                {
+                    <p class="admin-hint">Показаны первые @_activityModalLimit записей (самые новые). Сузьте период при выгрузке.</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" disabled="@_activityModalBusy" @onclick="CloseActivityModal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    private const int _activityPreviewLimit = 10;
+    private const int _activityModalLimit = 250;
     private bool _loading = true;
     private bool _isAdmin;
     private string _apiDocsUrl = "";
@@ -236,8 +359,13 @@
     private bool _busy;
 
     private AdminDashboardDto? _dash;
-    private long? _pingMs;
-    private List<AdminActivityItemDto> _activity = [];
+    private List<AdminActivityItemDto> _activityPreview = [];
+    private List<AdminActivityItemDto> _activityModal = [];
+    private bool _showActivityModal;
+    private bool _activityModalBusy;
+    private string? _activityModalError;
+    private DateOnly? _exportFrom;
+    private DateOnly? _exportTo;
     private List<AdminUserDto> _users = [];
     private List<AdminCategoryDto> _categories = [];
     private List<AdminTemplateDto> _templates = [];
@@ -247,9 +375,21 @@
     private string _newTemplateName = "";
     private string _newTemplateCategoryId = "";
 
+    private bool _pingLiveHeld;
+    private bool _staffBusy;
+    private StaffStatsDto? _staffStats;
+    private string _onecBaseUrl = "";
+    private string _onecUsername = "";
+    private string _onecPassword = "";
+    private string? _onecTestMessage;
+    private bool _onecTestOk;
+    private string? _staffImportMessage;
+
     protected override async Task OnInitializedAsync()
     {
-        _apiDocsUrl = ApiOptions.BaseUrl.TrimEnd('/') + "/docs";
+        ApiEndpoints.Changed += OnApiEndpointsChanged;
+        PingLive.Changed += OnPingLiveChanged;
+        UpdateApiDocsUrl();
         try
         {
             var me = await Auth.GetMeAsync();
@@ -262,9 +402,13 @@
 
         if (_isAdmin)
         {
+            PingLive.Acquire();
+            _pingLiveHeld = true;
             try
             {
                 await RefreshAllAsync();
+                await LoadStaffWizardAsync();
+                await PingLive.RefreshNowAsync();
             }
             catch (Exception ex)
             {
@@ -274,6 +418,14 @@
 
         _loading = false;
     }
+
+    private string FormatActivePingMs()
+    {
+        var ms = PingLive.TryGetLatencyMs(ApiEndpoints.ActiveBaseUrl);
+        return ms.HasValue ? $"{ms} мс" : "—";
+    }
+
+    private void OnPingLiveChanged() => _ = InvokeAsync(StateHasChanged);
 
     private static string AbbrevPath(string p)
     {
@@ -289,7 +441,7 @@
         try
         {
             _dash = await AdminApi.GetDashboardAsync();
-            _activity = await AdminApi.GetActivityAsync(60);
+            _activityPreview = await AdminApi.GetActivityAsync(_activityPreviewLimit);
             _users = await AdminApi.GetUsersAsync();
             _categories = await AdminApi.GetCategoriesAsync();
             _templates = await AdminApi.GetTemplatesAsync();
@@ -307,20 +459,14 @@
     private async Task PingAsync()
     {
         if (_busy) return;
-        _busy = true;
         _error = null;
         try
         {
-            _pingMs = await AdminApi.PingHealthMsAsync();
+            await PingLive.RefreshNowAsync();
         }
         catch (Exception ex)
         {
-            _pingMs = null;
             _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
         }
     }
 
@@ -454,6 +600,208 @@
     }
 
     private void GoProfile() => Navigation.NavigateTo("/profile");
+
+    private async Task LoadStaffWizardAsync()
+    {
+        try
+        {
+            _staffStats = await StaffApi.GetStaffStatsAsync();
+            var cfg = await StaffApi.GetOneCConfigAsync();
+            _onecBaseUrl = cfg.BaseUrl ?? "";
+            _onecUsername = cfg.Username ?? "";
+            _onecPassword = "";
+        }
+        catch
+        {
+            /* старый API без /admin/staff */
+        }
+    }
+
+    private async Task SaveOneCConfigAsync()
+    {
+        if (_staffBusy) return;
+        _staffBusy = true;
+        _error = null;
+        try
+        {
+            await StaffApi.SaveOneCConfigAsync(new OneCConfigUpdateRequest(_onecBaseUrl, _onecUsername, _onecPassword));
+            _onecPassword = "";
+            _onecTestMessage = "Настройки 1С сохранены.";
+            _onecTestOk = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _staffBusy = false;
+        }
+    }
+
+    private async Task TestOneCAsync()
+    {
+        if (_staffBusy) return;
+        _staffBusy = true;
+        _onecTestMessage = null;
+        try
+        {
+            var r = await StaffApi.TestOneCAsync();
+            _onecTestOk = r.Ok;
+            _onecTestMessage = r.Ok
+                ? $"OK · {r.LatencyMs} мс — {r.Message}"
+                : r.Message ?? "Не удалось подключиться к 1С.";
+        }
+        catch (Exception ex)
+        {
+            _onecTestOk = false;
+            _onecTestMessage = ex.Message;
+        }
+        finally
+        {
+            _staffBusy = false;
+        }
+    }
+
+    private async Task OnStaffFileSelected(InputFileChangeEventArgs e)
+    {
+        if (_staffBusy) return;
+        var file = e.File;
+        if (file is null) return;
+        _staffBusy = true;
+        _staffImportMessage = null;
+        _error = null;
+        try
+        {
+            await using var stream = file.OpenReadStream(8 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+            var r = await StaffApi.ImportStaffFileAsync(ms, file.Name);
+            _staffImportMessage =
+                $"Импортировано {r.RowsImported} из {r.RowsTotal}: отделов +{r.DepartmentsUpserted}, должностей +{r.PositionsUpserted}, записей +{r.StaffUpserted}.";
+            await LoadStaffWizardAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _staffBusy = false;
+        }
+    }
+
+    private void OnApiEndpointsChanged() => _ = InvokeAsync(async () =>
+    {
+        UpdateApiDocsUrl();
+        await PingLive.RefreshNowAsync();
+    });
+
+    private void UpdateApiDocsUrl() =>
+        _apiDocsUrl = ApiEndpoints.ActiveBaseUrl.TrimEnd('/') + "/docs";
+
+    public ValueTask DisposeAsync()
+    {
+        ApiEndpoints.Changed -= OnApiEndpointsChanged;
+        PingLive.Changed -= OnPingLiveChanged;
+        if (_pingLiveHeld)
+        {
+            PingLive.Release();
+            _pingLiveHeld = false;
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    private async Task OpenActivityModalAsync()
+    {
+        _showActivityModal = true;
+        _activityModalError = null;
+        await ReloadActivityModalAsync();
+    }
+
+    private void CloseActivityModal()
+    {
+        if (_activityModalBusy) return;
+        _showActivityModal = false;
+        _activityModalError = null;
+    }
+
+    private async Task ReloadActivityModalAsync()
+    {
+        _activityModalBusy = true;
+        _activityModalError = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            _activityModal = await AdminApi.GetActivityAsync(_activityModalLimit, _exportFrom, _exportTo);
+        }
+        catch (Exception ex)
+        {
+            _activityModal = [];
+            _activityModalError = ex.Message;
+        }
+        finally
+        {
+            _activityModalBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ExportActivityTxtAsync()
+    {
+        _activityModalBusy = true;
+        _activityModalError = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (_exportFrom is not null && _exportTo is not null && _exportFrom > _exportTo)
+            {
+                _activityModalError = "Дата «С» не может быть позже даты «По».";
+                return;
+            }
+
+            // Выгрузка из данных GET /admin/activity (без /export — его может не быть на старом API).
+            var rows = await AdminApi.GetActivityAsync(_activityModalLimit, _exportFrom, _exportTo);
+            _activityModal = rows;
+            var bytes = ActivityLogExport.ToUtf8Bytes(rows, _exportFrom, _exportTo, _activityModalLimit);
+            var fname = BuildActivityExportFileName(_exportFrom, _exportTo);
+            if (!await FileDownload.TrySaveFileAsync(fname, bytes, "text/plain"))
+                _activityModalError = "Не удалось сохранить файл.";
+        }
+        catch (Exception ex)
+        {
+            _activityModalError = ex.Message;
+        }
+        finally
+        {
+            _activityModalBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string BuildActivityExportFileName(DateOnly? from, DateOnly? to)
+    {
+        if (from is not null && to is not null)
+            return $"mpk-activity_{from:yyyy-MM-dd}_{to:yyyy-MM-dd}.txt";
+        if (from is not null)
+            return $"mpk-activity_from_{from:yyyy-MM-dd}.txt";
+        if (to is not null)
+            return $"mpk-activity_to_{to:yyyy-MM-dd}.txt";
+        return "mpk-activity-log.txt";
+    }
+
+    private static string FormatActivityTime(string? createdAt)
+    {
+        if (string.IsNullOrWhiteSpace(createdAt)) return "—";
+        if (DateTime.TryParse(createdAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt)
+            || DateTime.TryParse(createdAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out dt))
+        {
+            return dt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.GetCultureInfo("ru-RU"));
+        }
+        return createdAt;
+    }
 
     private static bool ParseCheckbox(ChangeEventArgs e) =>
         e.Value is bool b

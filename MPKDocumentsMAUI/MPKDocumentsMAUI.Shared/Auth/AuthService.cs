@@ -39,7 +39,7 @@ public sealed class AuthService
     public async Task LoginWithPasswordAsync(string phoneNumber, string password)
     {
         var token = await _api.LoginAsync(
-            new LoginRequest(phoneNumber.Trim(), password));
+            new LoginRequest(PhoneDisplay.NormalizeE164(phoneNumber), password));
         await _tokenStore.SetAccessTokenAsync(token.access_token);
         _authState.NotifyAuthChanged();
     }
@@ -53,8 +53,14 @@ public sealed class AuthService
     }
 
     public Task<EmailCodeSendResponse> SendRegisterEmailCodeAsync(string phoneNumber, string fullName,
-        string password, string email) =>
-        _api.SendRegisterEmailCodeAsync(new RegisterRequest(phoneNumber, fullName, password, NormalizeEmail(email)));
+        string password, string email, int positionId, int departmentId) =>
+        _api.SendRegisterEmailCodeAsync(new RegisterRequest(
+            PhoneDisplay.NormalizeE164(phoneNumber),
+            fullName.Trim(),
+            password,
+            NormalizeEmail(email),
+            positionId,
+            departmentId));
 
     public async Task CompleteRegistrationWithEmailCodeAsync(string email, string code)
     {

@@ -9,6 +9,7 @@
 @inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
 @inject MPKDocumentsMAUI.Shared.Api.AuthApiClient AuthApi
 @inject NavigationManager Navigation
+@inject IDocumentFeedWatchService FeedWatch
 
 <PageTitle>@(showArchive ? "Архив" : "Недавние") — МПК Документы</PageTitle>
 
@@ -566,6 +567,8 @@
     protected override async Task OnInitializedAsync()
     {
         Navigation.LocationChanged += OnNavigationLocationChanged;
+        FeedWatch.FeedChanged += OnFeedChanged;
+        FeedWatch.Start();
         try
         {
             var me = await AuthApi.MeAsync();
@@ -577,6 +580,8 @@
         }
         await LoadDocumentsAsync();
     }
+
+    private void OnFeedChanged() => _ = InvokeAsync(LoadDocumentsAsync);
 
     private string? _lastRelativePath;
 
@@ -596,7 +601,12 @@
         }
     }
 
-    public void Dispose() => Navigation.LocationChanged -= OnNavigationLocationChanged;
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnNavigationLocationChanged;
+        FeedWatch.FeedChanged -= OnFeedChanged;
+        FeedWatch.Stop();
+    }
 
     private async Task LoadDocumentsAsync()
     {

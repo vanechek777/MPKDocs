@@ -1,0 +1,10 @@
+@inject IConnectionMonitorService ConnectionMonitor
+@implements IDisposable
+
+<ConnectionQualityToast />
+
+@code {
+    protected override void OnInitialized() => ConnectionMonitor.Start();
+
+    public void Dispose() => ConnectionMonitor.Stop();
+}

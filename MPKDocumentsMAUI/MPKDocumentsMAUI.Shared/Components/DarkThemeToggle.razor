@@ -1,0 +1,49 @@
+@inject IJSRuntime JS
+
+<div class="settings-item">
+    <span class="settings-label">Тёмная тема</span>
+    <label class="toggle-switch">
+        <input type="checkbox" @bind="_darkTheme" @bind:after="OnChangedAsync" />
+        <span class="toggle-slider"></span>
+    </label>
+</div>
+
+@code {
+    private const string SkDarkTheme = "mpk_dark_theme";
+    private bool _darkTheme = true;
+    private bool _loaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _loaded)
+            return;
+
+        _loaded = true;
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>("MPKDocuments.settingsGet", SkDarkTheme);
+            _darkTheme = ParseStoredBool(stored, whenNullOrEmpty: true);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            /* без JS */
+        }
+    }
+
+    private static bool ParseStoredBool(string? v, bool whenNullOrEmpty) =>
+        string.IsNullOrEmpty(v) ? whenNullOrEmpty : v is "1" or "true" or "True";
+
+    private async Task OnChangedAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("MPKDocuments.settingsSet", SkDarkTheme, _darkTheme ? "1" : "0");
+            await JS.InvokeVoidAsync("MPKDocuments.applyDarkTheme", _darkTheme);
+        }
+        catch
+        {
+            /* без JS */
+        }
+    }
+}

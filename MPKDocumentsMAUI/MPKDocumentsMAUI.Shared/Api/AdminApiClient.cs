@@ -64,19 +64,24 @@ public sealed class AdminApiClient
     {
         if (res.IsSuccessStatusCode) return;
         var raw = await ReadDetailAsync(res, ct);
-        throw new HttpRequestException(HttpApiErrorFormatter.Humanize(res.StatusCode, raw));
+        throw new HttpRequestException(
+            HttpApiErrorFormatter.Humanize(res.StatusCode, raw),
+            inner: null,
+            statusCode: res.StatusCode);
     }
 
-    /// <summary>Пинг публичного /health без JWT (измеряется на клиенте).</summary>
+    /// <summary>Пинг публичного /health активного API без JWT.</summary>
     public async Task<long> PingHealthMsAsync(CancellationToken ct = default)
     {
-        var sw = Stopwatch.StartNew();
-        var res = await _http.GetAsync(U("/health"), ct);
-        sw.Stop();
-        if (!res.IsSuccessStatusCode)
-            throw new HttpRequestException(HttpApiErrorFormatter.Humanize(res.StatusCode, await ReadDetailAsync(res, ct)));
-        return sw.ElapsedMilliseconds;
+        var result = await ApiHealthPing.PingAsync(_http, _options.BaseUrl, ct);
+        if (!result.Ok)
+            throw new HttpRequestException(result.Error ?? "Сервер недоступен");
+        return result.LatencyMs ?? 0;
     }
+
+    /// <summary>Пинг /health для указанного базового URL.</summary>
+    public Task<ApiPingResult> PingHealthForBaseUrlAsync(string baseUrl, CancellationToken ct = default) =>
+        ApiHealthPing.PingAsync(_http, baseUrl, ct);
 
     public async Task<AdminDashboardDto> GetDashboardAsync(CancellationToken ct = default)
     {
@@ -86,12 +91,38 @@ public sealed class AdminApiClient
         return (await res.Content.ReadFromJsonAsync<AdminDashboardDto>(JsonOpts, ct))!;
     }
 
-    public async Task<List<AdminActivityItemDto>> GetActivityAsync(int limit = 50, CancellationToken ct = default)
+    public async Task<List<AdminActivityItemDto>> GetActivityAsync(
+        int limit = 50,
+        DateOnly? from = null,
+        DateOnly? to = null,
+        CancellationToken ct = default)
     {
         await AttachAuthAsync();
-        var res = await _http.GetAsync(U($"/admin/activity?limit={limit}"), ct);
+        var qp = new List<string> { $"limit={Math.Clamp(limit, 1, 250)}" };
+        if (from is { } f)
+            qp.Add($"from={f:yyyy-MM-dd}");
+        if (to is { } t)
+            qp.Add($"to={t:yyyy-MM-dd}");
+        var res = await _http.GetAsync(U("/admin/activity?" + string.Join("&", qp)), ct);
         await ThrowIfFailedAsync(res, ct);
         return (await res.Content.ReadFromJsonAsync<List<AdminActivityItemDto>>(JsonOpts, ct)) ?? [];
+    }
+
+    public async Task<byte[]> DownloadActivityExportAsync(
+        DateOnly? from = null,
+        DateOnly? to = null,
+        int limit = 250,
+        CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var qp = new List<string> { $"limit={Math.Clamp(limit, 1, 250)}" };
+        if (from is { } f)
+            qp.Add($"from={f:yyyy-MM-dd}");
+        if (to is { } t)
+            qp.Add($"to={t:yyyy-MM-dd}");
+        var res = await _http.GetAsync(U("/admin/activity/export?" + string.Join("&", qp)), ct);
+        await ThrowIfFailedAsync(res, ct);
+        return await res.Content.ReadAsByteArrayAsync(ct);
     }
 
     public async Task<List<AdminUserDto>> GetUsersAsync(CancellationToken ct = default)

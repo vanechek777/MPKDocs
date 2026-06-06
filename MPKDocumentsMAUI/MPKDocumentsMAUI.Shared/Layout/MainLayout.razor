@@ -2,7 +2,10 @@
 @inject IJSRuntime JS
 @inject IMobileShellService MobileShell
 @inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Api.IApiEndpointStore ApiEndpoints
 @implements IDisposable
+
+<ApiEndpointBootstrap />
 
 <div class="app-shell @(MobileShell.IsSigningOnlyShell ? "app-shell--mobile-signing" : null)">
     @if (MobileShell.IsSigningOnlyShell)
@@ -18,6 +21,7 @@
         <FabMenu />
     }
     <BottomNavBar />
+    <ConnectionToastHost />
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -46,6 +50,12 @@
             _uxBootstrapped = true;
             try
             {
+                if (!ApiEndpoints.IsLoaded)
+                {
+                    ApiEndpoints.AttachJs(JS);
+                    await ApiEndpoints.LoadAsync();
+                }
+
                 await JS.InvokeVoidAsync("MPKDocuments.bootstrapUxFromStorage");
             }
             catch

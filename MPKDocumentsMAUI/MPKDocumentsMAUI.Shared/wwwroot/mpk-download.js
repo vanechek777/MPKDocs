@@ -5,6 +5,31 @@
  * @param {string} base64
  * @param {string} [mime]
  */
+/**
+ * Скачать текстовый файл (журнал действий и т.п.).
+ * @param {string} fileName
+ * @param {string} text
+ */
+export async function downloadText(fileName, text) {
+    const name = (fileName && String(fileName).trim()) || "download.txt";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const mime = "text/plain";
+
+    if (typeof window.showSaveFilePicker === "function") {
+        try {
+            const handle = await window.showSaveFilePicker(buildSaveOptions(name, mime));
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return;
+        } catch (e) {
+            if (e && e.name === "AbortError") return;
+        }
+    }
+
+    downloadWithAnchor(blob, name);
+}
+
 export async function downloadBase64(fileName, base64, mime) {
     const blob = base64ToBlob(base64, mime);
     const name = (fileName && String(fileName).trim()) || "download";

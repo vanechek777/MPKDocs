@@ -13,7 +13,7 @@ from app.core.config import settings
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name)
 
-    # For MAUI/WebView dev convenience; tighten in prod.
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

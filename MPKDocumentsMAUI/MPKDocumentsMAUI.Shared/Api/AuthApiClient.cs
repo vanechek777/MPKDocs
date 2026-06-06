@@ -69,7 +69,10 @@ public sealed class AuthApiClient
     {
         if (res.IsSuccessStatusCode) return;
         var raw = await ReadFastApiDetailAsync(res, ct);
-        throw new HttpRequestException(HttpApiErrorFormatter.Humanize(res.StatusCode, raw));
+        throw new HttpRequestException(
+            HttpApiErrorFormatter.Humanize(res.StatusCode, raw),
+            inner: null,
+            statusCode: res.StatusCode);
     }
 
     public async Task<TokenResponse> LoginAsync(LoginRequest req, CancellationToken ct = default)

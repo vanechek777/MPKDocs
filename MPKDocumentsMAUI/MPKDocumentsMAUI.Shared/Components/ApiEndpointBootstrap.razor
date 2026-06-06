@@ -1,0 +1,23 @@
+@inject IApiEndpointStore ApiEndpoints
+@inject IJSRuntime JS
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            ApiEndpoints.AttachJs(JS);
+            if (!ApiEndpoints.IsLoaded)
+                await ApiEndpoints.LoadAsync();
+
+            await JS.InvokeVoidAsync("MPKDocuments.bootstrapUxFromStorage");
+        }
+        catch
+        {
+            /* WebView без localStorage */
+        }
+    }
+}

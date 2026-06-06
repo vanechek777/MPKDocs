@@ -9,6 +9,8 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@inject MPKDocumentsMAUI.Shared.Services.IFileDownloadService FileDownload
+@using System.Net
 @using MPKDocumentsMAUI.Shared.Nep
 @using MPKDocumentsMAUI.Shared.Ui
 
@@ -410,14 +412,27 @@
             var (body, ct) = await DocsApi.DownloadDocumentFileAsync(_docId.Value, default, progress);
             var mime = ct ?? attachmentMime ?? "application/octet-stream";
             var safeName = string.IsNullOrWhiteSpace(docName) ? $"document-{_docId.Value}" : docName.Trim();
-            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
-            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
-            await mod.InvokeVoidAsync("downloadBase64", safeName, Convert.ToBase64String(body), mime);
-            await mod.DisposeAsync();
+            await FileDownload.TrySaveFileAsync(safeName, body, mime);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            loadError = "Нет доступа к файлу документа.";
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            loadError = "Файл не загружен или документ не найден.";
+        }
+        catch (HttpRequestException)
+        {
+            loadError = "Не удалось скачать файл. Проверьте, что API запущено.";
+        }
+        catch (OperationCanceledException)
+        {
+            /* пользователь закрыл диалог сохранения */
         }
         catch
         {
-            loadError = "Не удалось скачать файл.";
+            loadError = "Не удалось сохранить файл на устройстве.";
         }
         finally
         {
@@ -459,14 +474,23 @@
             if (string.IsNullOrWhiteSpace(baseName))
                 baseName = $"document-{_docId.Value}";
             var fileName = $"{baseName}.esig";
-            var modUrl = Navigation.ToAbsoluteUri("_content/MPKDocumentsMAUI.Shared/mpk-download.js").ToString();
-            var mod = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", modUrl);
-            await mod.InvokeVoidAsync("downloadBase64", fileName, Convert.ToBase64String(body), "application/octet-stream");
-            await mod.DisposeAsync();
+            await FileDownload.TrySaveFileAsync(fileName, body, "application/octet-stream");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            loadError = "НЭП-подпись для этого документа не найдена.";
+        }
+        catch (HttpRequestException)
+        {
+            loadError = "Не удалось скачать файл НЭП (.esig). Проверьте API.";
+        }
+        catch (OperationCanceledException)
+        {
+            /* отмена диалога */
         }
         catch
         {
-            loadError = "Не удалось скачать файл НЭП (.esig).";
+            loadError = "Не удалось сохранить файл НЭП (.esig).";
         }
         finally
         {

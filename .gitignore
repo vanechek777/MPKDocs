@@ -32,6 +32,12 @@
 *.app/
 *.dSYM/
 
+# API runtime (1C credentials, local admin config)
+MPKDocumentsAPI/data/
+
+# Local publish output
+publish/
+
 # NuGet
 packages/
 project.lock.json

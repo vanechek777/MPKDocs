@@ -1,0 +1,41 @@
+@using MPKDocumentsMAUI.Shared.Api
+
+<input class="@CssClass"
+       type="tel"
+       inputmode="tel"
+       autocomplete="@Autocomplete"
+       placeholder="+7 (___) ___-__-__"
+       maxlength="@PhoneDisplay.FormattedMaxLength"
+       value="@_display"
+       @oninput="OnInput"
+       @onfocus="OnFocus" />
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string CssClass { get; set; } = "form-input";
+    [Parameter] public string Autocomplete { get; set; } = "tel";
+
+    private string _display = "+7 ";
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(Value))
+            _display = PhoneDisplay.FormatInput(Value);
+        else if (string.IsNullOrWhiteSpace(_display) || _display == "+")
+            _display = "+7 ";
+    }
+
+    private void OnFocus()
+    {
+        if (string.IsNullOrWhiteSpace(_display) || _display == "+")
+            _display = "+7 ";
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString() ?? "";
+        _display = PhoneDisplay.FormatInput(raw);
+        await ValueChanged.InvokeAsync(PhoneDisplay.NormalizeE164(_display));
+    }
+}

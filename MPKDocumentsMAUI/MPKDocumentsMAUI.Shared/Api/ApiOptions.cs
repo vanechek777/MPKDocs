@@ -1,12 +1,11 @@
 namespace MPKDocumentsMAUI.Shared.Api;
 
 /// <summary>
-/// Базовый URL HTTP API (без завершающего /). Дефолт: mpk-docs.ru.tuna.am (если туннель выключен — будет 404).
-/// MAUI: переопределите в <c>Resources/Raw/appsettings.txt</c> (JSON) → <c>Api:BaseUrl</c>.
-/// Web: <c>appsettings.json</c> / <c>appsettings.Development.json</c> → <c>Api:BaseUrl</c>.
+/// Текущий базовый URL HTTP API (без завершающего /).
+/// Источник — <see cref="IApiEndpointStore"/> (список и выбор в админ-панели).
+/// Стартовое значение: <c>appsettings.txt</c> (MAUI) или <c>Api:BaseUrl</c> (Web).
 /// </summary>
-public sealed class ApiOptions
+public sealed class ApiOptions(IApiEndpointStore endpoints)
 {
-    public string BaseUrl { get; init; } = "https://mpk-docs.ru.tuna.am";
+    public string BaseUrl => endpoints.ActiveBaseUrl;
 }
-

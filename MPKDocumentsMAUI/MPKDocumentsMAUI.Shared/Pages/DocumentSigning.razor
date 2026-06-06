@@ -6,6 +6,8 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject MPKDocumentsMAUI.Shared.Api.DocumentsApiClient DocsApi
+@inject MPKDocumentsMAUI.Shared.Api.IDocumentFeedWatchService FeedWatch
+@using MPKDocumentsMAUI.Shared.Api
 
 <PageTitle>Подпись документов — МПК Документы</PageTitle>
 
@@ -435,8 +437,12 @@
     protected override async Task OnInitializedAsync()
     {
         Navigation.LocationChanged += OnNavigationLocationChanged;
+        FeedWatch.FeedChanged += OnFeedChanged;
+        FeedWatch.Start();
         await LoadAsync();
     }
+
+    private void OnFeedChanged() => _ = InvokeAsync(LoadAsync);
 
     private string? _lastRelativePath;
 
@@ -456,7 +462,12 @@
         }
     }
 
-    public void Dispose() => Navigation.LocationChanged -= OnNavigationLocationChanged;
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnNavigationLocationChanged;
+        FeedWatch.FeedChanged -= OnFeedChanged;
+        FeedWatch.Stop();
+    }
 
     private async Task LoadAsync()
     {

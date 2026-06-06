@@ -9,7 +9,7 @@ except Exception as e:  # pragma: no cover
         "and remove the unrelated `jose` package.\n"
         "Fix (Windows):\n"
         "  .\\.venv\\Scripts\\python -m pip uninstall -y jose\n"
-        "  .\\.venv\\Scripts\\python -m pip install -r requirements.txt\n"
+        "  .\\.venv\\Scripts\\python -m pip install -r requirements1.txt\n"
     ) from e
 from passlib.context import CryptContext
 

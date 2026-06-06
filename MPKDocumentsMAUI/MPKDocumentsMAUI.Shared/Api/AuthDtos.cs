@@ -4,7 +4,13 @@ namespace MPKDocumentsMAUI.Shared.Api;
 
 public sealed record LoginRequest(string phone_number, string password);
 
-public sealed record RegisterRequest(string phone_number, string full_name, string password, string email);
+public sealed record RegisterRequest(
+    string phone_number,
+    string full_name,
+    string password,
+    string email,
+    int position_id,
+    int department_id);
 
 /* --- Контракт для бэкенда (FastAPI и т.п.) — см. методы AuthApiClient c путём /auth/email/... ---
  * POST /auth/email/login/send        body: { "email": "..." }           → { "ok": true, "dev_code": optional }

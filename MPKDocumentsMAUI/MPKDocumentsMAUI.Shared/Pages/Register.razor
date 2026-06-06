@@ -5,9 +5,10 @@
 @inject NavigationManager Nav
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@inject StaffRegisterApiClient StaffApi
 
 <div class="auth-page">
-    <div class="auth-card">
+    <div class="auth-card auth-card--register">
         <div class="auth-brand">
             <div>
                 <h2 class="auth-title">Регистрация</h2>
@@ -25,32 +26,80 @@
             <EditForm Model="_model" OnValidSubmit="SendCodeFromFormAsync">
                 <DataAnnotationsValidator />
 
-                <div class="form-group">
-                    <label class="form-label">ФИО</label>
-                    <InputText class="form-input" @bind-Value="_model.FullName" placeholder="Иванов Иван Иванович" />
-                    <ValidationMessage For="() => _model.FullName" />
-                </div>
+                <div class="register-form-grid">
+                    <div class="register-staff-warning">
+                        Должность и отдел указываются один раз при регистрации. После создания аккаунта изменить их будет нельзя.
+                    </div>
 
-                <div class="form-group">
-                    <label class="form-label">Телефон</label>
-                    <InputText class="form-input" @bind-Value="_model.PhoneNumber" placeholder="+79990000005" />
-                    <ValidationMessage For="() => _model.PhoneNumber" />
-                </div>
+                    <div class="register-form-col">
+                        <div class="form-group staff-autocomplete">
+                            <label class="form-label">ФИО</label>
+                            <input class="form-input" value="@_model.FullName"
+                                   @oninput="OnFullNameInput"
+                                   placeholder="Иванов Иван Иванович"
+                                   autocomplete="name" />
+                            @if (_suggestions.Count > 0)
+                            {
+                                <ul class="staff-suggestions" role="listbox">
+                                    @foreach (var s in _suggestions)
+                                    {
+                                        <li role="option" @onclick="() => SelectSuggestionAsync(s)">
+                                            <span class="staff-suggestions__name">@s.full_name</span>
+                                            <span class="staff-suggestions__meta">@s.position_name · @s.department_name</span>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                            <ValidationMessage For="() => _model.FullName" />
+                            <div class="form-hint-muted">Начните вводить ФИО — появятся варианты из кадрового справочника.</div>
+                        </div>
 
-                <div class="form-group">
-                    <label class="form-label">Email</label>
-                    <InputText class="form-input" @bind-Value="_model.Email" type="email" autocomplete="email" placeholder="user@yandex.ru" />
-                    <ValidationMessage For="() => _model.Email" />
-                    <div class="form-hint-muted">На этот адрес придёт код для завершения регистрации.</div>
-                </div>
+                        <div class="form-group">
+                            <label class="form-label">Должность</label>
+                            <InputSelect class="form-input" TValue="int" @bind-Value="_model.PositionId" @bind-Value:after="OnPositionChangedAsync">
+                                <option value="0">— выберите должность —</option>
+                                @foreach (var p in _positions)
+                                {
+                                    <option value="@p.id">@p.name</option>
+                                }
+                            </InputSelect>
+                        </div>
 
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label">Пароль</label>
-                    <InputText class="form-input" @bind-Value="_model.Password" type="password" autocomplete="new-password" />
-                    <ValidationMessage For="() => _model.Password" />
-                </div>
+                        <div class="form-group register-form-col__last">
+                            <label class="form-label">Отдел</label>
+                            <InputSelect class="form-input" TValue="int" @bind-Value="_model.DepartmentId" disabled="@(_model.PositionId <= 0)">
+                                <option value="0">— выберите отдел —</option>
+                                @foreach (var d in _departments)
+                                {
+                                    <option value="@d.id">@d.name</option>
+                                }
+                            </InputSelect>
+                            <div class="form-hint-muted">Список отделов зависит от выбранной должности.</div>
+                        </div>
+                    </div>
 
-                <div class="auth-actions">
+                    <div class="register-form-col">
+                        <div class="form-group">
+                            <label class="form-label">Телефон</label>
+                            <PhoneInput @bind-Value="_model.PhoneNumber" />
+                            <ValidationMessage For="() => _model.PhoneNumber" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <InputText class="form-input" @bind-Value="_model.Email" type="email" autocomplete="email" placeholder="user@yandex.ru" />
+                            <ValidationMessage For="() => _model.Email" />
+                            <div class="form-hint-muted">На этот адрес придёт код для завершения регистрации.</div>
+                        </div>
+
+                        <div class="form-group register-form-col__last">
+                            <label class="form-label">Пароль</label>
+                            <InputText class="form-input" @bind-Value="_model.Password" type="password" autocomplete="new-password" />
+                            <ValidationMessage For="() => _model.Password" />
+                        </div>
+                    </div>
+
+                    <div class="auth-actions register-form-grid__actions">
                     <button class="btn btn-green" disabled="@_busy" type="submit">
                         @if (_busy)
                         {
@@ -64,6 +113,7 @@
                     <button class="btn btn-outline" type="button" @onclick="GoLogin">
                         Уже есть аккаунт? Войти
                     </button>
+                    </div>
                 </div>
             </EditForm>
         }
@@ -116,25 +166,120 @@
     private string? _lastDevRegisterCode;
 
     private RegisterModel _model = new();
+    private List<StaffSuggestItem> _suggestions = new();
+    private List<StaffPositionItem> _positions = new();
+    private List<StaffDepartmentItem> _departments = new();
+    private CancellationTokenSource? _suggestCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _positions = await StaffApi.GetPositionsAsync();
+        }
+        catch
+        {
+            _positions = new();
+        }
+    }
+
+    private async Task OnPositionChangedAsync()
+    {
+        _model.DepartmentId = 0;
+        await LoadDepartmentsAsync();
+    }
+
+    private async Task LoadDepartmentsAsync()
+    {
+        if (_model.PositionId <= 0)
+        {
+            _departments = new();
+            return;
+        }
+
+        try
+        {
+            _departments = await StaffApi.GetDepartmentsForPositionAsync(_model.PositionId);
+        }
+        catch
+        {
+            _departments = new();
+        }
+    }
+
+    private async Task SelectSuggestionAsync(StaffSuggestItem s)
+    {
+        _model.FullName = s.full_name;
+        _model.PositionId = s.position_id;
+        _model.DepartmentId = s.department_id;
+        _suggestions.Clear();
+        await LoadDepartmentsAsync();
+    }
+
+    private async Task OnFullNameInput(ChangeEventArgs e)
+    {
+        _model.FullName = e.Value?.ToString() ?? "";
+        _suggestCts?.Cancel();
+        _suggestCts = new CancellationTokenSource();
+        var ct = _suggestCts.Token;
+        var q = _model.FullName.Trim();
+        if (q.Length < 2)
+        {
+            _suggestions.Clear();
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(250, ct);
+            _suggestions = await StaffApi.SuggestNamesAsync(q, 10, ct);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            _suggestions.Clear();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private async Task SendCodeFromFormAsync()
     {
         if (_busy) return;
         _error = null;
+
+        if (!PhoneDisplay.IsCompleteRu(_model.PhoneNumber))
+        {
+            _error = "Укажите полный номер телефона в формате +7 (XXX) XXX-XX-XX.";
+            return;
+        }
+        if (_model.PositionId <= 0)
+        {
+            _error = "Выберите должность.";
+            return;
+        }
+        if (_model.DepartmentId <= 0)
+        {
+            _error = "Выберите отдел.";
+            return;
+        }
+
         _busy = true;
         try
         {
-            var r = await Auth.SendRegisterEmailCodeAsync(_model.PhoneNumber, _model.FullName, _model.Password,
-                _model.Email.Trim());
+            var r = await Auth.SendRegisterEmailCodeAsync(
+                _model.PhoneNumber, _model.FullName, _model.Password, _model.Email.Trim(),
+                _model.PositionId, _model.DepartmentId);
             _lastDevRegisterCode = string.IsNullOrWhiteSpace(r.DevCode) ? null : r.DevCode.Trim();
             _step = RegisterStep.Code;
             _code = "";
         }
         catch (Exception ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message)
-                ? "Не удалось отправить код. Возможно, email уже занят или API недоступно."
-                : ex.Message;
+            _error = HttpApiErrorFormatter.HumanizeException(ex);
         }
         finally
         {
@@ -149,13 +294,14 @@
         _error = null;
         try
         {
-            var r = await Auth.SendRegisterEmailCodeAsync(_model.PhoneNumber, _model.FullName, _model.Password,
-                _model.Email.Trim());
+            var r = await Auth.SendRegisterEmailCodeAsync(
+                _model.PhoneNumber, _model.FullName, _model.Password, _model.Email.Trim(),
+                _model.PositionId, _model.DepartmentId);
             _lastDevRegisterCode = string.IsNullOrWhiteSpace(r.DevCode) ? null : r.DevCode.Trim();
         }
         catch (Exception ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message) ? "Не удалось отправить код повторно." : ex.Message;
+            _error = HttpApiErrorFormatter.HumanizeException(ex);
         }
         finally
         {
@@ -175,9 +321,7 @@
         }
         catch (Exception ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message)
-                ? "Неверный или просроченный код регистрации."
-                : ex.Message;
+            _error = HttpApiErrorFormatter.HumanizeException(ex);
         }
         finally
         {
@@ -202,6 +346,10 @@
 
         [Required]
         public string PhoneNumber { get; set; } = "";
+
+        public int PositionId { get; set; }
+
+        public int DepartmentId { get; set; }
 
         [Required(ErrorMessage = "Укажите email")]
         [EmailAddress(ErrorMessage = "Введите корректный email")]

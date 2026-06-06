@@ -1,0 +1,218 @@
+@inject IApiEndpointStore Endpoints
+@inject IJSRuntime JS
+@inject IApiPingLiveService PingLive
+@implements IAsyncDisposable
+
+<div class="api-endpoint-settings">
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="api-endpoint-msg @(_messageError ? "api-endpoint-msg--error" : "api-endpoint-msg--ok")">@_message</p>
+    }
+
+    <div class="api-endpoint-toolbar">
+        <button type="button"
+                class="btn btn-outline btn-sm"
+                disabled="@(_busy || _pinging)"
+                @onclick="PingAllAsync">
+            @if (_pinging)
+            {
+                <span>Пинг…</span>
+            }
+            else
+            {
+                <span>Пинг всех адресов</span>
+            }
+        </button>
+    </div>
+
+    <div class="api-endpoint-list" role="radiogroup" aria-label="Базовый URL API">
+        @foreach (var e in Endpoints.Endpoints)
+        {
+            var isActive = string.Equals(e.Url, Endpoints.ActiveBaseUrl, StringComparison.OrdinalIgnoreCase);
+            <div class="api-endpoint-item @(isActive ? "api-endpoint-item--active" : null)">
+                <label class="api-endpoint-radio">
+                    <input type="radio"
+                           name="api-base-url"
+                           checked="@isActive"
+                           disabled="@_busy"
+                           @onchange="() => SelectAsync(e.Url)" />
+                    <span class="api-endpoint-radio-body">
+                        @if (!string.IsNullOrWhiteSpace(e.Label))
+                        {
+                            <span class="api-endpoint-label">@e.Label</span>
+                        }
+                        <code class="api-endpoint-url">@e.Url</code>
+                    </span>
+                </label>
+                <span class="api-endpoint-ping @GetPingCss(e.Url)" title="@GetPingTitle(e.Url)">
+                    @GetPingLabel(e.Url)
+                </span>
+                @if (AllowManageEndpoints && Endpoints.Endpoints.Count > 1)
+                {
+                    <button type="button"
+                            class="api-endpoint-remove"
+                            title="Удалить адрес"
+                            disabled="@(_busy || isActive)"
+                            @onclick="() => RemoveAsync(e.Url)">
+                        ×
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (AllowManageEndpoints)
+    {
+        <div class="api-endpoint-add">
+            <div class="form-group api-endpoint-add-field">
+                <label class="form-label">Новый URL</label>
+                <input class="form-input"
+                       type="url"
+                       placeholder="https://example.com или http://localhost:8000"
+                       @bind="_newUrl"
+                       disabled="@_busy" />
+            </div>
+            <div class="form-group api-endpoint-add-field">
+                <label class="form-label">Подпись (необязательно)</label>
+                <input class="form-input"
+                       type="text"
+                       placeholder="Локально, туннель…"
+                       @bind="_newLabel"
+                       disabled="@_busy" />
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" disabled="@_busy" @onclick="AddAsync">
+                Добавить
+            </button>
+        </div>
+    }
+
+    <p class="admin-hint api-endpoint-hint">
+        Активный: <code>@Endpoints.ActiveBaseUrl</code>.
+        Задержки обновляются каждые 2 с. После смены сервера войдите заново.
+    </p>
+</div>
+
+@code {
+    /// <summary>Добавление и удаление URL — только в админ-панели.</summary>
+    [Parameter] public bool AllowManageEndpoints { get; set; }
+
+    private bool _busy;
+    private bool _pinging;
+    private string? _message;
+    private bool _messageError;
+    private string _newUrl = "";
+    private string _newLabel = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Endpoints.AttachJs(JS);
+        if (!Endpoints.IsLoaded)
+            await Endpoints.LoadAsync();
+        Endpoints.Changed += OnEndpointsChanged;
+        PingLive.Changed += OnPingLiveChanged;
+    }
+
+    private void OnEndpointsChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnPingLiveChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task PingAllAsync()
+    {
+        if (_pinging) return;
+        _pinging = true;
+        try
+        {
+            await PingLive.RefreshNowAsync();
+        }
+        finally
+        {
+            _pinging = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetPingCss(string url)
+    {
+        if (PingLive.TryGet(url) is { } ping)
+            return ping.Ok ? "api-endpoint-ping--ok" : "api-endpoint-ping--bad";
+        return "api-endpoint-ping--idle";
+    }
+
+    private string GetPingLabel(string url)
+    {
+        if (PingLive.TryGet(url) is { Ok: true, LatencyMs: { } ms })
+            return $"{ms} мс";
+        if (PingLive.TryGet(url) is { Ok: false })
+            return "нет";
+        return "—";
+    }
+
+    private string? GetPingTitle(string url)
+    {
+        if (PingLive.TryGet(url) is { } ping)
+            return ping.Ok ? $"OK, {ping.LatencyMs} мс" : ping.Error;
+        return "Ожидание первого замера…";
+    }
+
+    private async Task SelectAsync(string url)
+    {
+        await RunAsync(async () =>
+        {
+            await Endpoints.SetActiveAsync(url);
+            _message = "Адрес API переключён.";
+            _messageError = false;
+            await PingLive.RefreshNowAsync();
+        });
+    }
+
+    private async Task AddAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Endpoints.AddEndpointAsync(_newUrl, _newLabel);
+            _newUrl = "";
+            _newLabel = "";
+            _message = "Адрес добавлен и выбран.";
+            _messageError = false;
+            await PingLive.RefreshNowAsync();
+        });
+    }
+
+    private async Task RemoveAsync(string url)
+    {
+        await RunAsync(async () =>
+        {
+            await Endpoints.RemoveEndpointAsync(url);
+            _message = "Адрес удалён.";
+            _messageError = false;
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _message = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _messageError = true;
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Endpoints.Changed -= OnEndpointsChanged;
+        PingLive.Changed -= OnPingLiveChanged;
+        return ValueTask.CompletedTask;
+    }
+}

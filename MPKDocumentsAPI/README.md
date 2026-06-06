@@ -6,7 +6,7 @@ Create `.env` (see `.env.example`) and install deps:
 
 ```bash
 python -m venv .venv
-.venv\\Scripts\\pip install -r requirements.txt
+.venv\\Scripts\\pip install -r requirements1.txt
 ```
 
 If you previously installed the unrelated `jose` package, remove it:

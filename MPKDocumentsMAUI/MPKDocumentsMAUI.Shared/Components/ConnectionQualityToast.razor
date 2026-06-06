@@ -1,0 +1,69 @@
+@inject IConnectionMonitorService ConnectionMonitor
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthState
+@implements IDisposable
+
+@using System.Security.Claims
+
+@if (_visible)
+{
+    <div class="connection-toast" role="status" aria-live="polite">
+        <span class="connection-toast__icon" aria-hidden="true">⚠</span>
+        <div class="connection-toast__body">
+            <div class="connection-toast__title">Проблемы с подключением</div>
+            <div class="connection-toast__sub">@_subtitle</div>
+            @if (_isAdmin)
+            {
+                <button type="button" class="btn btn-sm btn-outline connection-toast__btn" @onclick="GoAdminHosts">
+                    Переключить хост
+                </button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool _visible;
+    private bool _isAdmin;
+    private string _subtitle = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        ConnectionMonitor.Changed += OnChanged;
+        var state = await AuthState.GetAuthenticationStateAsync();
+        _isAdmin = state.User.IsInRole("admin");
+        SyncVisibility();
+    }
+
+    private void OnChanged() => _ = InvokeAsync(() =>
+    {
+        SyncVisibility();
+        StateHasChanged();
+    });
+
+    private void SyncVisibility()
+    {
+        if (ConnectionMonitor.HasConnectionProblem)
+        {
+            if (!_visible)
+            {
+                _visible = true;
+                _subtitle = BuildSubtitle();
+            }
+        }
+        else if (_visible)
+        {
+            _visible = false;
+            _subtitle = "";
+        }
+    }
+
+    private string BuildSubtitle() =>
+        ConnectionMonitor.LatencyMs is { } ms
+            ? $"Задержка {ms} мс (норма до {ConnectionMonitorService.PoorLatencyMs} мс)"
+            : "Сервер не отвечает или сеть нестабильна";
+
+    private void GoAdminHosts() => Navigation.NavigateTo("/admin#api-hosts");
+
+    public void Dispose() => ConnectionMonitor.Changed -= OnChanged;
+}

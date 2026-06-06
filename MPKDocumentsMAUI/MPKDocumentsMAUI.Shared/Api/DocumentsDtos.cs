@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace MPKDocumentsMAUI.Shared.Api;
 
+public sealed record FeedStampDto(string stamp);
+
 public sealed record DocumentListItemDto(
     int id,
     string title,

@@ -81,6 +81,16 @@ public sealed class DocumentsApiClient
         return (await res.Content.ReadFromJsonAsync<List<DocumentListItemDto>>(cancellationToken: ct)) ?? new();
     }
 
+    /// <summary>Компактная метка ленты для live-обновления (polling).</summary>
+    public async Task<string> GetFeedStampAsync(CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.GetAsync(U("/documents/feed-stamp"), ct);
+        res.EnsureSuccessStatusCode();
+        var dto = await res.Content.ReadFromJsonAsync<FeedStampDto>(cancellationToken: ct);
+        return dto?.stamp ?? "";
+    }
+
     public async Task<List<DocumentListItemDto>> GetMyDraftsAsync(int limit = 50, CancellationToken ct = default)
     {
         await AttachAuthAsync();
@@ -311,7 +321,14 @@ public sealed class DocumentsApiClient
             U($"/documents/{documentId}/file"),
             HttpCompletionOption.ResponseHeadersRead,
             ct);
-        res.EnsureSuccessStatusCode();
+        if (!res.IsSuccessStatusCode)
+        {
+            var detail = await res.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException(
+                string.IsNullOrWhiteSpace(detail) ? res.ReasonPhrase : detail,
+                inner: null,
+                statusCode: res.StatusCode);
+        }
         var media = res.Content.Headers.ContentType?.MediaType;
         var body = await ReadHttpContentWithProgressAsync(res.Content, downloadProgress, ct);
         return (body, media);
@@ -348,7 +365,14 @@ public sealed class DocumentsApiClient
             U($"/documents/{documentId}/nep-signature.esig"),
             HttpCompletionOption.ResponseHeadersRead,
             ct);
-        res.EnsureSuccessStatusCode();
+        if (!res.IsSuccessStatusCode)
+        {
+            var detail = await res.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException(
+                string.IsNullOrWhiteSpace(detail) ? res.ReasonPhrase : detail,
+                inner: null,
+                statusCode: res.StatusCode);
+        }
         return await ReadHttpContentWithProgressAsync(res.Content, downloadProgress, ct);
     }
 

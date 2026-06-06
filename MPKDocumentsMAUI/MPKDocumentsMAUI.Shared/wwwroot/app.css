@@ -2045,6 +2045,80 @@ html.mpk-theme-light .modal-card .document-card {
 .form-textarea { min-height: 100px; resize: vertical; }
 
 /* Auth pages (вход / регистрация): без лишнего скролла на iPhone — см. viewport + safe-area */
+.auth-api-settings-btn {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    right: calc(env(safe-area-inset-right, 0px) + 12px);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    background: var(--glass-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.auth-api-settings-btn:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.auth-api-settings-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.auth-api-settings-overlay {
+    z-index: 200;
+}
+
+.auth-api-settings-modal {
+    width: min(520px, calc(100vw - 32px));
+    max-height: min(88vh, 720px);
+    display: flex;
+    flex-direction: column;
+}
+
+.auth-api-settings-modal .modal-body {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.auth-api-settings-intro {
+    margin: 0 0 var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.auth-settings-section + .auth-settings-section {
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--separator);
+}
+
+.auth-settings-section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 650;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.auth-settings-section .settings-item {
+    margin-bottom: 0;
+}
+
 .auth-page {
     min-height: 100dvh;
     min-height: 100svh; /* запас для старых WebView */
@@ -3373,6 +3447,188 @@ html.mpk-theme-light .mpk-mobile-nav__sheet-item:hover {
 .admin-section {
     margin-bottom: var(--spacing-2xl);
 }
+.api-endpoint-settings {
+    margin-top: 4px;
+}
+.api-endpoint-toolbar {
+    margin-bottom: 10px;
+}
+.api-endpoint-ping {
+    flex-shrink: 0;
+    align-self: center;
+    min-width: 52px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.api-endpoint-ping--idle {
+    color: var(--text-tertiary);
+    background: transparent;
+}
+.api-endpoint-ping--pending {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+}
+.api-endpoint-ping--ok {
+    color: var(--accent-green, #3dd68c);
+    background: rgba(61, 214, 140, 0.12);
+}
+.api-endpoint-ping--bad {
+    color: var(--danger, #e74c3c);
+    background: rgba(231, 76, 60, 0.12);
+}
+.api-endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.api-endpoint-item {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-md);
+    background: var(--surface-secondary, rgba(255, 255, 255, 0.03));
+}
+.api-endpoint-item--active {
+    border-color: var(--accent-green, #3dd68c);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-green, #3dd68c) 35%, transparent);
+}
+.api-endpoint-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+    margin: 0;
+}
+.api-endpoint-radio input {
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+.api-endpoint-radio-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.api-endpoint-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.api-endpoint-url {
+    font-size: var(--font-size-xs);
+    word-break: break-all;
+    color: var(--text-secondary);
+}
+.api-endpoint-remove {
+    flex-shrink: 0;
+    width: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+.api-endpoint-remove:hover:not(:disabled) {
+    color: var(--danger, #e74c3c);
+    background: rgba(231, 76, 60, 0.12);
+}
+.api-endpoint-remove:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+.api-endpoint-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 10px;
+}
+.api-endpoint-add-field {
+    flex: 1 1 200px;
+    margin: 0;
+}
+.api-endpoint-hint {
+    margin-bottom: 0;
+}
+.api-endpoint-msg {
+    font-size: var(--font-size-sm);
+    margin: 0 0 10px;
+}
+.api-endpoint-msg--error {
+    color: var(--danger, #e74c3c);
+}
+.api-endpoint-msg--ok {
+    color: var(--accent-green, #3dd68c);
+}
+.admin-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.admin-hint {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    margin: 0 0 12px;
+    line-height: 1.4;
+}
+.admin-muted {
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 16px;
+}
+.admin-activity-modal {
+    max-width: min(960px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+.admin-activity-modal .modal-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.admin-activity-export-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.admin-activity-date-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+.admin-activity-date-label .form-input {
+    min-width: 150px;
+}
+.admin-activity-modal-error {
+    color: var(--danger, #e74c3c);
+    font-size: var(--font-size-sm);
+    margin: 0 0 8px;
+}
+.admin-activity-modal-table {
+    flex: 1 1 auto;
+    max-height: 52vh;
+    overflow: auto;
+}
 .admin-table-wrap {
     overflow-x: auto;
     border-radius: var(--radius-md);
@@ -3416,4 +3672,139 @@ html.mpk-theme-light .mpk-mobile-nav__sheet-item:hover {
 }
 .admin-inline-form--wrap .form-input {
     flex: 1 1 160px;
+}
+
+/* Toast плохого подключения (нижний правый угол) */
+.connection-toast {
+    position: fixed;
+    right: 16px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    z-index: 1200;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    max-width: min(360px, calc(100vw - 32px));
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    background: rgba(80, 24, 24, 0.95);
+    border: 1px solid rgba(255, 120, 120, 0.35);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    color: #fff;
+}
+.connection-toast__icon {
+    font-size: 1.1rem;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+.connection-toast__title {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    margin-bottom: 2px;
+}
+.connection-toast__sub {
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.35;
+}
+.connection-toast__btn {
+    margin-top: 8px;
+}
+
+/* Регистрация: двухколоночная форма */
+.auth-card--register {
+    width: min(760px, 100%);
+    padding: 18px 22px;
+}
+
+.register-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 20px;
+    align-items: start;
+}
+
+.register-form-grid .register-staff-warning,
+.register-form-grid .register-form-grid__actions {
+    grid-column: 1 / -1;
+}
+
+.register-form-col .form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.register-form-col__last {
+    margin-bottom: 0 !important;
+}
+
+.register-form-grid .auth-actions {
+    margin-top: var(--spacing-md);
+}
+
+@media (max-width: 680px) {
+    .register-form-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+}
+
+/* Регистрация: кадровый справочник */
+.register-staff-warning {
+    margin-bottom: var(--spacing-md);
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 193, 7, 0.12);
+    border: 1px solid rgba(255, 193, 7, 0.35);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+.staff-autocomplete {
+    position: relative;
+}
+.staff-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    max-height: 220px;
+    overflow: auto;
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated, #1e1e1e);
+    border: 1px solid var(--separator);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.staff-suggestions li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.staff-suggestions li:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.staff-suggestions__name {
+    display: block;
+    font-size: var(--font-size-sm);
+}
+.staff-suggestions__meta {
+    display: block;
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+}
+.admin-section-subtitle {
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: var(--font-size-sm);
+}
+.admin-onec-wizard,
+.admin-import-row {
+    margin-top: var(--spacing-md);
+}
+.admin-hint--ok {
+    color: var(--success, #2ecc71);
+}
+.admin-hint--bad {
+    color: var(--danger, #e74c3c);
 }

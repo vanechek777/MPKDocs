@@ -24,6 +24,7 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<IMobileShellService, MobileShellService>();
             builder.Services.AddSingleton<IQrScanService, MauiQrScanService>();
+            builder.Services.AddSingleton<IFileDownloadService, MauiFileDownloadService>();
 #if WINDOWS
             builder.Services.AddSingleton<IDocumentFilePicker, Platforms.Windows.WindowsDocumentFilePicker>();
 #else
@@ -34,7 +35,9 @@ namespace MPKDocumentsMAUI
 
             // API + auth: BaseUrl из Resources/Raw/appsettings.txt (JSON, ключ Api:BaseUrl). Расширение .txt — обход dotnet/maui#17078 (iOS/macOS не принимают .json в MauiAsset).
             // Эмулятор Android к хосту: http://10.0.2.2:8000
-            builder.Services.AddSingleton(LoadApiOptionsFromAppPackage());
+            builder.Services.AddSingleton<IApiEndpointStore>(_ => new ApiEndpointStore(LoadPackagedApiBaseUrl()));
+            builder.Services.AddSingleton<ApiOptions>();
+            builder.Services.AddSingleton<IApiPingLiveService, ApiPingLiveService>();
             // Явный таймаут: иначе при «молчащем» API кнопка «Отправляем…» висит бесконечно.
             builder.Services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(3) });
             builder.Services.AddSingleton<IAuthTokenStore, SecureAuthTokenStore>();
@@ -46,6 +49,9 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<ApiAuthenticationStateProvider>();
             builder.Services.AddSingleton<AuthenticationStateProvider>(sp => sp.GetRequiredService<ApiAuthenticationStateProvider>());
             builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddSingleton<IConnectionMonitorService, ConnectionMonitorService>();
+            builder.Services.AddSingleton<IDocumentFeedWatchService, DocumentFeedWatchService>();
+            builder.Services.AddSingleton<StaffRegisterApiClient>();
             builder.Services.AddSingleton<INotificationPermissionService, NotificationPermissionService>();
 
 #if DEBUG
@@ -56,7 +62,7 @@ namespace MPKDocumentsMAUI
             return builder.Build();
         }
 
-        private static ApiOptions LoadApiOptionsFromAppPackage()
+        private static string? LoadPackagedApiBaseUrl()
         {
             try
             {
@@ -65,17 +71,15 @@ namespace MPKDocumentsMAUI
                 if (doc.RootElement.TryGetProperty("Api", out var api) &&
                     api.TryGetProperty("BaseUrl", out var urlEl))
                 {
-                    var url = urlEl.GetString();
-                    if (!string.IsNullOrWhiteSpace(url))
-                        return new ApiOptions { BaseUrl = url!.Trim() };
+                    return urlEl.GetString();
                 }
             }
             catch
             {
-                // нет файла или неверный JSON — дефолт из ApiOptions
+                // нет файла или неверный JSON
             }
 
-            return new ApiOptions();
+            return null;
         }
     }
 }

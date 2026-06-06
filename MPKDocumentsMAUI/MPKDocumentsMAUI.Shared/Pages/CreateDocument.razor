@@ -138,12 +138,12 @@
         <div class="wizard-form">
             @if (schemaFields.Count > 0)
             {
-                <div class="form-group">
+            <div class="form-group">
                     <label class="form-label">Параметры документа</label>
                     <div style="margin-top:8px;color:var(--text-tertiary);font-size:12px">
                         Заполни данные по выбранному типу документа.
-                    </div>
-                </div>
+            </div>
+            </div>
 
                 @foreach (var f in schemaFields)
                 {
@@ -175,11 +175,11 @@
                                              @onclick="() => SetFieldValue(f.Name, opt)">
                                             <div class="category-card-icon" style="width:40px;height:40px;opacity:0.9">
                                                 <img src="icons/document.png" alt="" style="width:32px;height:32px;object-fit:contain;opacity:0.85" />
-                                            </div>
+            </div>
                                             <div class="category-card-name" style="font-size:12px;line-height:1.2">@opt</div>
-                                        </div>
+                </div>
                                     }
-                                </div>
+            </div>
                             }
                             else
                             {
@@ -220,7 +220,7 @@
                                    value="@GetFieldValue(f.Name)"
                                    @oninput="(e) => OnFieldInput(e, f.Name)" />
                         }
-                    </div>
+            </div>
                 }
             }
 
@@ -231,8 +231,8 @@
                 {
                     <div style="margin-top:8px;color:var(--text-tertiary);font-size:12px">
                         Выбран файл: @PickedFileName (@PickedFileSizeText)
-                    </div>
-                }
+        </div>
+    }
             </div>
 
             <div class="form-group" style="margin-top: 12px;">
@@ -264,19 +264,19 @@
                 <div class="form-group" style="margin-top: 12px;">
                     <label class="form-label">Укажите подписанта:</label>
                     <div class="signers-search" style="margin-top: 8px;">
-                        <input type="text" placeholder="Поиск сотрудника..." @bind="signerSearch" @bind:event="oninput" />
-                    </div>
-                    @foreach (var s in GetFilteredSigners())
-                    {
-                        <div class="signer-option @(selectedSigners.Contains(s.Id) ? "selected" : "")"
+                <input type="text" placeholder="Поиск сотрудника..." @bind="signerSearch" @bind:event="oninput" />
+            </div>
+            @foreach (var s in GetFilteredSigners())
+            {
+                <div class="signer-option @(selectedSigners.Contains(s.Id) ? "selected" : "")"
                              style="margin-top: 10px;"
-                             @onclick="() => ToggleSigner(s.Id)">
-                            <div class="signer-avatar">@s.Initials</div>
-                            <div class="signer-details">
-                                <div class="signer-details-name">@s.FullName</div>
-                                <div class="signer-details-dept">@s.Department</div>
-                            </div>
-                            <div class="signer-check"></div>
+                     @onclick="() => ToggleSigner(s.Id)">
+                    <div class="signer-avatar">@s.Initials</div>
+                    <div class="signer-details">
+                        <div class="signer-details-name">@s.FullName</div>
+                        <div class="signer-details-dept">@s.Department</div>
+                    </div>
+                    <div class="signer-check"></div>
                         </div>
                     }
                 </div>
@@ -324,7 +324,7 @@
                 <div class="confirm-header">
                     <div class="confirm-title">Проверь данные перед отправкой</div>
                     <div class="confirm-sub">@SelectedTemplateName</div>
-                </div>
+</div>
 
                 <div class="confirm-grid">
                     <section class="confirm-section">
