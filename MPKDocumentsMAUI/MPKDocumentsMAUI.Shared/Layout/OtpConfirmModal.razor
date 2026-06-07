@@ -24,13 +24,13 @@
                 <div class="otp-title">Подтвердите действие</div>
                 <div class="otp-desc">
                     Подписание документа @DocumentName с помощью средства электронной подписи.<br/><br/>
-                    @if (string.IsNullOrWhiteSpace(PhoneHint))
+                    @if (string.IsNullOrWhiteSpace(EmailHint))
                     {
-                        <text>Введите 6-значный код из SMS.</text>
+                        <text>Введите 6-значный код с почты.</text>
                     }
                     else
                     {
-                        <text>Введите код из SMS, отправленного на @PhoneHint</text>
+                        <text>Введите код с почты, отправленный на @EmailHint</text>
                     }
                 </div>
                 <div class="otp-inputs">
@@ -77,7 +77,7 @@
     [Parameter] public string? SubmitError { get; set; }
     [Parameter] public string SubmittingText { get; set; } = "Проверка кода и подписание…";
     [Parameter] public string DocumentName { get; set; } = "";
-    [Parameter] public string PhoneHint { get; set; } = "";
+    [Parameter] public string EmailHint { get; set; } = "";
 
     private readonly string[] otpDigits = new string[6] { "", "", "", "", "", "" };
 

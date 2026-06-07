@@ -1,0 +1,24 @@
+@inject IApiHostSettingsUi HostSettingsUi
+@implements IDisposable
+
+<ApiHostSettingsModal @bind-IsOpen="_open"
+                      ShowThemeToggle="false"
+                      Title="Сервер API"
+                      Intro="Выберите адрес API. После смены сервера потребуется войти заново." />
+
+@code {
+    private bool _open;
+
+    protected override void OnInitialized()
+    {
+        HostSettingsUi.OpenRequested += OnOpenRequested;
+    }
+
+    private void OnOpenRequested()
+    {
+        _open = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => HostSettingsUi.OpenRequested -= OnOpenRequested;
+}

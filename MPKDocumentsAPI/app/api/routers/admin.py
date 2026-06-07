@@ -16,7 +16,7 @@ from app.api.deps import require_admin
 from app.core.admin_access import env_admin_user_ids, user_is_admin
 from app.core.audit import log_user_activity
 from app.core.presence import online_within_seconds
-from app.core.runtime_config import get_onec_config, patch_onec_config
+from app.core.runtime_config import get_api_endpoints, get_onec_config, patch_onec_config, set_api_endpoints
 from app.db.models import Department, Document, DocumentCategory, DocumentTemplate, Position, StaffDirectoryEntry, User, UserActivityLog
 from app.services.staff_import import import_staff_rows, parse_staff_file
 from app.db.session import get_db
@@ -575,6 +575,54 @@ class OneCConfigResponse(BaseModel):
     base_url: str | None = None
     username: str | None = None
     has_password: bool = False
+
+
+class ApiEndpointItem(BaseModel):
+    url: str
+    label: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _url_http(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s.startswith(("http://", "https://")):
+            raise ValueError("URL должен начинаться с http:// или https://")
+        return s.rstrip("/")
+
+
+class ApiEndpointsResponse(BaseModel):
+    endpoints: list[ApiEndpointItem]
+
+
+class ApiEndpointsUpdateRequest(BaseModel):
+    endpoints: list[ApiEndpointItem] = Field(min_length=1)
+
+
+@router.get("/api-endpoints", response_model=ApiEndpointsResponse)
+async def admin_get_api_endpoints(_: User = Depends(require_admin)) -> ApiEndpointsResponse:
+    items = get_api_endpoints()
+    return ApiEndpointsResponse(
+        endpoints=[ApiEndpointItem(url=e["url"], label=e.get("label")) for e in items]
+    )
+
+
+@router.put("/api-endpoints", response_model=ApiEndpointsResponse)
+async def admin_put_api_endpoints(
+    body: ApiEndpointsUpdateRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiEndpointsResponse:
+    saved = set_api_endpoints([e.model_dump() for e in body.endpoints])
+    await log_user_activity(
+        db,
+        user_id=int(admin.id),
+        action="ADMIN_API_ENDPOINTS",
+        detail=f"count={len(saved)}",
+    )
+    await db.commit()
+    return ApiEndpointsResponse(
+        endpoints=[ApiEndpointItem(url=e["url"], label=e.get("label")) for e in saved]
+    )
 
 
 class OneCConfigUpdateRequest(BaseModel):

@@ -1,5 +1,6 @@
 @inject IApiEndpointStore ApiEndpoints
 @inject IJSRuntime JS
+@inject HttpClient Http
 
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -10,8 +11,11 @@
         try
         {
             ApiEndpoints.AttachJs(JS);
+            ApiEndpoints.AttachHttp(Http);
             if (!ApiEndpoints.IsLoaded)
                 await ApiEndpoints.LoadAsync();
+            else
+                await ApiEndpoints.RefreshFromServerAsync();
 
             await JS.InvokeVoidAsync("MPKDocuments.bootstrapUxFromStorage");
         }

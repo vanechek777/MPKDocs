@@ -48,6 +48,13 @@ public sealed record AdminSetAdminRequest([property: JsonPropertyName("is_admin"
 
 public sealed record AdminPromoteByPhoneRequest([property: JsonPropertyName("phone_number")] string PhoneNumber);
 
+public sealed record ApiEndpointsConfigResponse(
+    [property: JsonPropertyName("endpoints")] IReadOnlyList<ApiEndpointConfigItem> Endpoints);
+
+public sealed record ApiEndpointConfigItem(
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("label")] string? Label);
+
 public sealed record AdminTemplateDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string Name,

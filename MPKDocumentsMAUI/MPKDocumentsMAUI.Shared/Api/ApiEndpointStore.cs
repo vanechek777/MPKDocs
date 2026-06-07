@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.JSInterop;
@@ -7,15 +8,18 @@ namespace MPKDocumentsMAUI.Shared.Api;
 public sealed class ApiEndpointStore : IApiEndpointStore
 {
     public const string DefaultBaseUrl = "https://mpk-docs.ru.tuna.am";
-    private const string StorageKey = "mpk_api_endpoints_v1";
+    private const string LegacyStorageKey = "mpk_api_endpoints_v1";
+    private const string ActiveStorageKey = "mpk_api_active_v1";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNameCaseInsensitive = true,
     };
 
     private readonly string _packagedDefault;
+    private HttpClient? _http;
     private IJSRuntime? _js;
     private List<ApiEndpointEntry> _endpoints = [];
     private string _active = DefaultBaseUrl;
@@ -38,26 +42,27 @@ public sealed class ApiEndpointStore : IApiEndpointStore
 
     public void AttachJs(IJSRuntime js) => _js = js;
 
+    public void AttachHttp(HttpClient http) => _http = http;
+
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        if (_js is null)
-            return;
+        await RefreshFromServerAsync(cancellationToken);
+    }
 
-        try
+    public async Task RefreshFromServerAsync(CancellationToken cancellationToken = default)
+    {
+        var fromServer = await TryFetchServerEndpointsAsync(cancellationToken);
+        if (fromServer is { Count: > 0 })
         {
-            var json = await _js.InvokeAsync<string?>("MPKDocuments.settingsGet", cancellationToken, StorageKey);
-            if (!string.IsNullOrWhiteSpace(json))
-            {
-                var state = JsonSerializer.Deserialize<PersistedState>(json, JsonOpts);
-                if (state is not null)
-                    ApplyPersisted(state);
-            }
+            _endpoints = fromServer;
         }
-        catch
+        else
         {
-            /* localStorage недоступен */
+            await TryLoadLegacyLocalListAsync(cancellationToken);
+            EnsurePackagedDefaultInList();
         }
 
+        await RestoreActiveFromLocalAsync(cancellationToken);
         _loaded = true;
         Changed?.Invoke();
     }
@@ -69,40 +74,36 @@ public sealed class ApiEndpointStore : IApiEndpointStore
             throw new InvalidOperationException("Этого адреса нет в списке.");
 
         _active = normalized;
-        await PersistAsync(cancellationToken);
+        await PersistActiveAsync(cancellationToken);
     }
 
-    public async Task AddEndpointAsync(string url, string? label = null, CancellationToken cancellationToken = default)
+    public Task AddEndpointAsync(string url, string? label = null, CancellationToken cancellationToken = default)
     {
-        var normalized = NormalizeUrl(url)
-                         ?? throw new ArgumentException("Введите полный URL (http:// или https://).", nameof(url));
-
-        if (_endpoints.Any(e => string.Equals(e.Url, normalized, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Такой адрес уже есть в списке.");
-
-        var trimmedLabel = string.IsNullOrWhiteSpace(label) ? null : label.Trim();
-        _endpoints.Add(new ApiEndpointEntry(normalized, trimmedLabel));
-        _active = normalized;
-        await PersistAsync(cancellationToken);
+        throw new InvalidOperationException(
+            "Список серверов задаётся администратором на сервере. Используйте админ-панель.");
     }
 
-    public async Task RemoveEndpointAsync(string url, CancellationToken cancellationToken = default)
+    public Task RemoveEndpointAsync(string url, CancellationToken cancellationToken = default)
     {
-        var normalized = NormalizeUrl(url)
-                         ?? throw new ArgumentException("Некорректный URL.", nameof(url));
+        throw new InvalidOperationException(
+            "Список серверов задаётся администратором на сервере. Используйте админ-панель.");
+    }
 
-        if (_endpoints.Count <= 1)
-            throw new InvalidOperationException("Нельзя удалить последний адрес.");
+    public async Task ApplyServerEndpointsAsync(
+        IReadOnlyList<ApiEndpointEntry> endpoints,
+        CancellationToken cancellationToken = default)
+    {
+        var items = NormalizeEntries(endpoints);
+        if (items.Count == 0)
+            throw new InvalidOperationException("Должен остаться хотя бы один адрес API.");
 
-        var idx = _endpoints.FindIndex(e => string.Equals(e.Url, normalized, StringComparison.OrdinalIgnoreCase));
-        if (idx < 0)
-            throw new InvalidOperationException("Адрес не найден в списке.");
-
-        _endpoints.RemoveAt(idx);
-        if (string.Equals(_active, normalized, StringComparison.OrdinalIgnoreCase))
+        _endpoints = items;
+        if (_endpoints.All(e => !string.Equals(e.Url, _active, StringComparison.OrdinalIgnoreCase)))
             _active = _endpoints[0].Url;
 
-        await PersistAsync(cancellationToken);
+        await PersistActiveAsync(cancellationToken);
+        _loaded = true;
+        Changed?.Invoke();
     }
 
     public static string? NormalizeUrl(string? url)
@@ -122,77 +123,161 @@ public sealed class ApiEndpointStore : IApiEndpointStore
         return uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
     }
 
-    private void ApplyPersisted(PersistedState state)
+    private async Task<List<ApiEndpointEntry>?> TryFetchServerEndpointsAsync(CancellationToken cancellationToken)
     {
-        var items = new List<ApiEndpointEntry>();
-        if (state.Endpoints is { Count: > 0 } list)
+        if (_http is null)
+            return null;
+
+        foreach (var baseUrl in BootstrapUrls())
         {
-            foreach (var e in list)
+            try
             {
-                var u = NormalizeUrl(e.Url);
-                if (u is null)
+                var uri = new Uri(new Uri(baseUrl.TrimEnd('/') + "/"), "config/api-endpoints");
+                var response = await _http.GetFromJsonAsync<ServerEndpointsPayload>(uri, JsonOpts, cancellationToken);
+                if (response?.Endpoints is not { Count: > 0 } list)
                     continue;
-                if (items.Any(x => string.Equals(x.Url, u, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-                var lbl = string.IsNullOrWhiteSpace(e.Label) ? null : e.Label.Trim();
-                items.Add(new ApiEndpointEntry(u, lbl));
+
+                var normalized = NormalizeEntries(list.Select(e => new ApiEndpointEntry(e.Url, e.Label)));
+                if (normalized.Count > 0)
+                    return normalized;
+            }
+            catch
+            {
+                /* пробуем следующий bootstrap URL */
             }
         }
 
-        if (items.Count == 0)
-        {
-            _endpoints = [new ApiEndpointEntry(_packagedDefault, "По умолчанию")];
-            _active = _packagedDefault;
-            return;
-        }
-
-        _endpoints = items;
-        var active = NormalizeUrl(state.ActiveUrl);
-        _active = active is not null
-                  && items.Any(e => string.Equals(e.Url, active, StringComparison.OrdinalIgnoreCase))
-            ? active
-            : items[0].Url;
+        return null;
     }
 
-    private async Task PersistAsync(CancellationToken cancellationToken)
+    private IEnumerable<string> BootstrapUrls()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in new[] { _packagedDefault, _active })
+        {
+            var u = NormalizeUrl(candidate);
+            if (u is null || !seen.Add(u))
+                continue;
+            yield return u;
+        }
+    }
+
+    private async Task TryLoadLegacyLocalListAsync(CancellationToken cancellationToken)
     {
         if (_js is null)
-        {
-            Changed?.Invoke();
             return;
-        }
-
-        var state = new PersistedState
-        {
-            ActiveUrl = _active,
-            Endpoints = _endpoints
-                .Select(e => new PersistedEndpoint { Url = e.Url, Label = e.Label })
-                .ToList(),
-        };
 
         try
         {
-            await _js.InvokeVoidAsync(
-                "MPKDocuments.settingsSet",
-                cancellationToken,
-                StorageKey,
-                JsonSerializer.Serialize(state, JsonOpts));
+            var json = await _js.InvokeAsync<string?>("MPKDocuments.settingsGet", cancellationToken, LegacyStorageKey);
+            if (string.IsNullOrWhiteSpace(json))
+                return;
+
+            var state = JsonSerializer.Deserialize<LegacyPersistedState>(json, JsonOpts);
+            if (state?.Endpoints is not { Count: > 0 })
+                return;
+
+            var items = NormalizeEntries(state.Endpoints.Select(e => new ApiEndpointEntry(e.Url, e.Label)));
+            if (items.Count > 0)
+                _endpoints = items;
         }
         catch
         {
-            /* ignore */
+            /* localStorage недоступен */
+        }
+    }
+
+    private void EnsurePackagedDefaultInList()
+    {
+        if (_endpoints.Any(e => string.Equals(e.Url, _packagedDefault, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        _endpoints.Insert(0, new ApiEndpointEntry(_packagedDefault, "По умолчанию"));
+    }
+
+    private async Task RestoreActiveFromLocalAsync(CancellationToken cancellationToken)
+    {
+        string? active = null;
+        if (_js is not null)
+        {
+            try
+            {
+                active = await _js.InvokeAsync<string?>("MPKDocuments.settingsGet", cancellationToken, ActiveStorageKey);
+                if (string.IsNullOrWhiteSpace(active))
+                {
+                    var legacyJson = await _js.InvokeAsync<string?>("MPKDocuments.settingsGet", cancellationToken, LegacyStorageKey);
+                    if (!string.IsNullOrWhiteSpace(legacyJson))
+                    {
+                        var legacy = JsonSerializer.Deserialize<LegacyPersistedState>(legacyJson, JsonOpts);
+                        active = legacy?.ActiveUrl;
+                    }
+                }
+            }
+            catch
+            {
+                /* ignore */
+            }
+        }
+
+        var normalized = NormalizeUrl(active);
+        _active = normalized is not null
+                  && _endpoints.Any(e => string.Equals(e.Url, normalized, StringComparison.OrdinalIgnoreCase))
+            ? normalized
+            : _endpoints[0].Url;
+    }
+
+    private async Task PersistActiveAsync(CancellationToken cancellationToken)
+    {
+        if (_js is not null)
+        {
+            try
+            {
+                await _js.InvokeVoidAsync("MPKDocuments.settingsSet", cancellationToken, ActiveStorageKey, _active);
+            }
+            catch
+            {
+                /* ignore */
+            }
         }
 
         Changed?.Invoke();
     }
 
-    private sealed class PersistedState
+    private static List<ApiEndpointEntry> NormalizeEntries(IEnumerable<ApiEndpointEntry> source)
     {
-        public string? ActiveUrl { get; set; }
-        public List<PersistedEndpoint>? Endpoints { get; set; }
+        var items = new List<ApiEndpointEntry>();
+        foreach (var e in source)
+        {
+            var u = NormalizeUrl(e.Url);
+            if (u is null)
+                continue;
+            if (items.Any(x => string.Equals(x.Url, u, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            var lbl = string.IsNullOrWhiteSpace(e.Label) ? null : e.Label.Trim();
+            items.Add(new ApiEndpointEntry(u, lbl));
+        }
+
+        return items;
     }
 
-    private sealed class PersistedEndpoint
+    private sealed class ServerEndpointsPayload
+    {
+        public List<ServerEndpoint>? Endpoints { get; set; }
+    }
+
+    private sealed class ServerEndpoint
+    {
+        public string Url { get; set; } = "";
+        public string? Label { get; set; }
+    }
+
+    private sealed class LegacyPersistedState
+    {
+        public string? ActiveUrl { get; set; }
+        public List<LegacyEndpoint>? Endpoints { get; set; }
+    }
+
+    private sealed class LegacyEndpoint
     {
         public string Url { get; set; } = "";
         public string? Label { get; set; }

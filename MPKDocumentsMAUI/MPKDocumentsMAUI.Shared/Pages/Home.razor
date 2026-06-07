@@ -256,7 +256,7 @@
 
 <OtpConfirmModal IsVisible="showOtp"
                  DocumentName="@(selectedDoc?.FileName ?? "")"
-                 PhoneHint="@otpPhoneHint"
+                 EmailHint="@otpEmailHint"
                  OnClose="CloseHomeOtpModal"
                  TrySubmitAsync="TrySubmitHomeSignOtpAsync"
                  IsSubmitting="homeSignOtpBusy"
@@ -283,7 +283,7 @@
     private bool showOtp;
     private bool showSuccess;
     private DocumentItem? selectedDoc;
-    private string otpPhoneHint = "";
+    private string otpEmailHint = "";
     private bool homeSignOtpBusy;
     private string? homeOtpSubmitError;
 
@@ -490,7 +490,7 @@
         }
         catch (Exception ex)
         {
-            loadError = $"Не удалось отправить SMS с кодом: {ex.Message}";
+            loadError = $"Не удалось отправить код на почту: {ex.Message}";
         }
     }
 
@@ -572,11 +572,11 @@
         try
         {
             var me = await AuthApi.MeAsync();
-            otpPhoneHint = PhoneDisplay.MaskRu(me.phone_number);
+            otpEmailHint = EmailDisplay.Mask(me.email);
         }
         catch
         {
-            otpPhoneHint = "";
+            otpEmailHint = "";
         }
         await LoadDocumentsAsync();
     }

@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject IJSRuntime JS
+@inject HttpClient Http
 @inject IMobileShellService MobileShell
 @inject NavigationManager Navigation
 @inject MPKDocumentsMAUI.Shared.Api.IApiEndpointStore ApiEndpoints
@@ -22,6 +23,10 @@
     }
     <BottomNavBar />
     <ConnectionToastHost />
+    @if (MobileShell.IsSigningOnlyShell)
+    {
+        <ApiHostSettingsHost />
+    }
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -50,6 +55,7 @@
             _uxBootstrapped = true;
             try
             {
+                ApiEndpoints.AttachHttp(Http);
                 if (!ApiEndpoints.IsLoaded)
                 {
                     ApiEndpoints.AttachJs(JS);

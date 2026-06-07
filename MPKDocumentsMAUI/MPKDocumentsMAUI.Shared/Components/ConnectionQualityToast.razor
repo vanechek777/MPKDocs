@@ -1,6 +1,8 @@
 @inject IConnectionMonitorService ConnectionMonitor
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthState
+@inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@inject MPKDocumentsMAUI.Shared.Services.IApiHostSettingsUi HostSettingsUi
 @implements IDisposable
 
 @using System.Security.Claims
@@ -12,7 +14,13 @@
         <div class="connection-toast__body">
             <div class="connection-toast__title">Проблемы с подключением</div>
             <div class="connection-toast__sub">@_subtitle</div>
-            @if (_isAdmin)
+            @if (MobileShell.IsSigningOnlyShell)
+            {
+                <button type="button" class="btn btn-sm btn-outline connection-toast__btn" @onclick="OpenHostSettings">
+                    Переключить хост
+                </button>
+            }
+            else if (_isAdmin)
             {
                 <button type="button" class="btn btn-sm btn-outline connection-toast__btn" @onclick="GoAdminHosts">
                     Переключить хост
@@ -62,6 +70,8 @@
         ConnectionMonitor.LatencyMs is { } ms
             ? $"Задержка {ms} мс (норма до {ConnectionMonitorService.PoorLatencyMs} мс)"
             : "Сервер не отвечает или сеть нестабильна";
+
+    private void OpenHostSettings() => HostSettingsUi.RequestOpen();
 
     private void GoAdminHosts() => Navigation.NavigateTo("/admin#api-hosts");
 

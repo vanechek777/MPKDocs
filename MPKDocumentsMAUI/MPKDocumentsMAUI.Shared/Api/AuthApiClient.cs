@@ -28,7 +28,7 @@ public sealed class AuthApiClient
             string.IsNullOrWhiteSpace(token) ? null : new AuthenticationHeaderValue("Bearer", token);
     }
 
-    /// <summary>Запрос отправки OTP (SMS через SMSC на сервере).</summary>
+    /// <summary>Запрос отправки OTP для подписания (код на email пользователя).</summary>
     public async Task<OtpSendResponse> SendOtpAsync(CancellationToken ct = default)
     {
         await AttachAuthAsync();

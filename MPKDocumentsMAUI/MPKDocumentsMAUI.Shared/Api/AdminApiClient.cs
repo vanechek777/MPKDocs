@@ -196,4 +196,21 @@ public sealed class AdminApiClient
         await ThrowIfFailedAsync(res, ct);
         return (await res.Content.ReadFromJsonAsync<AdminTemplateDto>(JsonOpts, ct))!;
     }
+
+    public async Task<IReadOnlyList<ApiEndpointEntry>> SaveApiEndpointsAsync(
+        IReadOnlyList<ApiEndpointEntry> endpoints,
+        CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var body = new
+        {
+            endpoints = endpoints.Select(e => new { url = e.Url, label = e.Label }).ToList(),
+        };
+        var res = await _http.PutAsJsonAsync(U("/admin/api-endpoints"), body, JsonOpts, ct);
+        await ThrowIfFailedAsync(res, ct);
+        var payload = await res.Content.ReadFromJsonAsync<ApiEndpointsConfigResponse>(JsonOpts, ct);
+        return payload?.Endpoints is { Count: > 0 } items
+            ? items.Select(e => new ApiEndpointEntry(e.Url, e.Label)).ToList()
+            : endpoints;
+    }
 }

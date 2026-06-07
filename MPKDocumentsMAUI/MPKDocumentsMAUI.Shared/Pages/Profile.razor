@@ -4,6 +4,8 @@
 @inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
 @inject IJSRuntime JS
 @inject INotificationPermissionService Notifications
+@inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
+@inject MPKDocumentsMAUI.Shared.Services.IApiHostSettingsUi HostSettingsUi
 @using System.Net.Http
 @using MPKDocumentsMAUI.Shared.Api
 
@@ -119,12 +121,25 @@
             </div>
         </div>
 
+        @if (MobileShell.IsSigningOnlyShell)
+        {
+            <div class="profile-section" style="margin-top:var(--spacing-lg)">
+                <div class="profile-section-title">Подключение к серверу</div>
+                <p class="form-hint-muted" style="margin-bottom:var(--spacing-md)">
+                    Список серверов задаёт администратор. После смены адреса потребуется войти заново.
+                </p>
+                <button type="button" class="btn btn-secondary profile-action-btn" @onclick="OpenHostSettings">
+                    Сменить сервер API
+                </button>
+            </div>
+        }
+
         <div class="profile-actions">
-            @if (isAdmin)
+            @if (isAdmin && !MobileShell.IsSigningOnlyShell)
             {
                 <NavLink class="btn btn-secondary profile-action-btn" href="/admin">Админ-панель</NavLink>
             }
-            <button type="button" class="profile-logout-btn" @onclick="Logout">Выход</button>
+            <button type="button" class="profile-logout-btn" @onclick="AskLogout">Выход</button>
         </div>
     }
     else
@@ -173,6 +188,22 @@
     }
 </div>
 
+@if (_confirmLogout)
+{
+    <div class="modal-overlay" @onclick="CancelLogout">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <div class="modal-header">Выход</div>
+            <div class="modal-body">
+                <p style="margin:0">Вы уверены, что хотите выйти?</p>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:12px;justify-content:flex-end">
+                <button type="button" class="btn btn-secondary" @onclick="CancelLogout">Отмена</button>
+                <button type="button" class="btn btn-red" @onclick="ConfirmLogoutAsync">Выйти</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private const string SkNotifications = "mpk_notifications";
     private const string SkDarkTheme = "mpk_dark_theme";
@@ -181,6 +212,7 @@
     private const string SkCompactLists = "mpk_compact_lists";
 
     private bool editMode;
+    private bool _confirmLogout;
     private bool _loading = true;
     private bool _busy;
     private string? loadError;
@@ -388,9 +420,16 @@
         }
     }
 
-    private async Task Logout()
+    private void AskLogout() => _confirmLogout = true;
+
+    private void CancelLogout() => _confirmLogout = false;
+
+    private async Task ConfirmLogoutAsync()
     {
+        _confirmLogout = false;
         await Auth.LogoutAsync();
         Navigation.NavigateTo("/login", replace: true);
     }
+
+    private void OpenHostSettings() => HostSettingsUi.RequestOpen();
 }

@@ -1,6 +1,11 @@
 @inject IApiEndpointStore Endpoints
 @inject IJSRuntime JS
+@inject HttpClient Http
 @inject IApiPingLiveService PingLive
+@inject AdminApiClient AdminApi
+@inject MPKDocumentsMAUI.Shared.Auth.AuthService Auth
+@inject NavigationManager Navigation
+@inject MPKDocumentsMAUI.Shared.Auth.IAuthTokenStore TokenStore
 @implements IAsyncDisposable
 
 <div class="api-endpoint-settings">
@@ -88,6 +93,14 @@
 
     <p class="admin-hint api-endpoint-hint">
         Активный: <code>@Endpoints.ActiveBaseUrl</code>.
+        @if (AllowManageEndpoints)
+        {
+            <text>Список хостов общий для всех пользователей и устройств (хранится на сервере).</text>
+        }
+        else
+        {
+            <text>Доступные серверы задаёт администратор.</text>
+        }
         Задержки обновляются каждые 2 с. После смены сервера войдите заново.
     </p>
 </div>
@@ -106,8 +119,11 @@
     protected override async Task OnInitializedAsync()
     {
         Endpoints.AttachJs(JS);
+        Endpoints.AttachHttp(Http);
         if (!Endpoints.IsLoaded)
             await Endpoints.LoadAsync();
+        else
+            await Endpoints.RefreshFromServerAsync();
         Endpoints.Changed += OnEndpointsChanged;
         PingLive.Changed += OnPingLiveChanged;
     }
@@ -158,7 +174,12 @@
     {
         await RunAsync(async () =>
         {
+            var previous = Endpoints.ActiveBaseUrl;
             await Endpoints.SetActiveAsync(url);
+            await MaybeLogoutAfterHostChangeAsync(previous);
+            if (!await HasAccessTokenAsync())
+                return;
+
             _message = "Адрес API переключён.";
             _messageError = false;
             await PingLive.RefreshNowAsync();
@@ -169,10 +190,27 @@
     {
         await RunAsync(async () =>
         {
-            await Endpoints.AddEndpointAsync(_newUrl, _newLabel);
+            if (!AllowManageEndpoints)
+                return;
+
+            var normalized = ApiEndpointStore.NormalizeUrl(_newUrl)
+                             ?? throw new ArgumentException("Введите полный URL (http:// или https://).");
+            if (Endpoints.Endpoints.Any(e => string.Equals(e.Url, normalized, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Такой адрес уже есть в списке.");
+
+            var label = string.IsNullOrWhiteSpace(_newLabel) ? null : _newLabel.Trim();
+            var list = Endpoints.Endpoints.Append(new ApiEndpointEntry(normalized, label)).ToList();
+            await AdminApi.SaveApiEndpointsAsync(list);
+            await Endpoints.RefreshFromServerAsync();
+            var previous = Endpoints.ActiveBaseUrl;
+            await Endpoints.SetActiveAsync(normalized);
+            await MaybeLogoutAfterHostChangeAsync(previous);
+            if (!await HasAccessTokenAsync())
+                return;
+
             _newUrl = "";
             _newLabel = "";
-            _message = "Адрес добавлен и выбран.";
+            _message = "Адрес добавлен на сервер и выбран.";
             _messageError = false;
             await PingLive.RefreshNowAsync();
         });
@@ -182,10 +220,40 @@
     {
         await RunAsync(async () =>
         {
-            await Endpoints.RemoveEndpointAsync(url);
-            _message = "Адрес удалён.";
+            if (!AllowManageEndpoints)
+                return;
+
+            var normalized = ApiEndpointStore.NormalizeUrl(url)
+                             ?? throw new ArgumentException("Некорректный URL.");
+            if (Endpoints.Endpoints.Count <= 1)
+                throw new InvalidOperationException("Нельзя удалить последний адрес.");
+
+            var list = Endpoints.Endpoints
+                .Where(e => !string.Equals(e.Url, normalized, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            await AdminApi.SaveApiEndpointsAsync(list);
+            await Endpoints.RefreshFromServerAsync();
+            _message = "Адрес удалён на сервере.";
             _messageError = false;
         });
+    }
+
+    private async Task<bool> HasAccessTokenAsync()
+    {
+        var token = await TokenStore.GetAccessTokenAsync();
+        return !string.IsNullOrWhiteSpace(token);
+    }
+
+    private async Task MaybeLogoutAfterHostChangeAsync(string previousUrl)
+    {
+        if (string.Equals(previousUrl, Endpoints.ActiveBaseUrl, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!await HasAccessTokenAsync())
+            return;
+
+        await Auth.LogoutAsync();
+        Navigation.NavigateTo("/login", replace: true);
     }
 
     private async Task RunAsync(Func<Task> action)

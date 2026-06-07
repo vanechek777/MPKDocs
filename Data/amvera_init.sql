@@ -1,21 +1,18 @@
--- MySQL 8.x schema for MPKDocuments (converted from SQL Server)
--- Engine: InnoDB, charset: utf8mb4
+-- Схема MPKDocuments для Amvera (phpMyAdmin / managed MySQL).
+-- БД уже создана переменной MYSQL_DATABASE — не выполняйте DROP DATABASE.
+-- Импорт: phpMyAdmin → выбрать БД MPKDocuments → Импорт → этот файл.
+--
+-- Отличия от MPKDocumentsData.mysql.sql:
+--   CURRENT_TIMESTAMP(6) вместо (UTC_TIMESTAMP(6))
+--   utf8mb4_unicode_ci (совместимость с MariaDB)
+--   админ-таблицы и StaffDirectory включены
 
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
-DROP DATABASE IF EXISTS `MPKDocuments`;
-CREATE DATABASE `MPKDocuments`
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_0900_ai_ci;
-
 USE `MPKDocuments`;
 
--- ----------------------------
--- Tables
--- ----------------------------
-
-CREATE TABLE `Departments` (
+CREATE TABLE IF NOT EXISTS `Departments` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `OneCId` VARCHAR(50) NULL,
   `Name` VARCHAR(255) NOT NULL,
@@ -26,17 +23,17 @@ CREATE TABLE `Departments` (
     FOREIGN KEY (`ParentDepartmentId`) REFERENCES `Departments` (`id`)
     ON DELETE SET NULL
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `Positions` (
+CREATE TABLE IF NOT EXISTS `Positions` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `OneCId` VARCHAR(50) NULL,
   `Name` VARCHAR(255) NOT NULL,
   `isActive` TINYINT(1) NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `Users` (
+CREATE TABLE IF NOT EXISTS `Users` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `OneCId` VARCHAR(50) NULL,
   `PhoneNumber` VARCHAR(20) NOT NULL,
@@ -45,6 +42,7 @@ CREATE TABLE `Users` (
   `PositionId` INT NULL,
   `DepartmentId` INT NULL,
   `Status` TINYINT(1) NULL DEFAULT 1,
+  `IsAdmin` TINYINT(1) NOT NULL DEFAULT 0,
   `PasswordHash` LONGTEXT NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `UQ_Users_PhoneNumber` (`PhoneNumber`),
@@ -58,26 +56,40 @@ CREATE TABLE `Users` (
     FOREIGN KEY (`PositionId`) REFERENCES `Positions` (`id`)
     ON DELETE SET NULL
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `DocumentTemplates` (
+CREATE TABLE IF NOT EXISTS `DocumentCategories` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `Name` VARCHAR(255) NOT NULL,
+  `SortOrder` INT NOT NULL DEFAULT 0,
+  `isActive` TINYINT(1) NULL DEFAULT 1,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `DocumentTemplates` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `Name` VARCHAR(255) NOT NULL,
   `TemplatePath` LONGTEXT NOT NULL,
   `FormSchema` JSON NOT NULL,
+  `CategoryId` INT NULL,
   `isActive` TINYINT(1) NULL DEFAULT 1,
   PRIMARY KEY (`id`),
+  KEY `IX_DocumentTemplates_CategoryId` (`CategoryId`),
+  CONSTRAINT `FK_DocumentTemplates_CategoryId`
+    FOREIGN KEY (`CategoryId`) REFERENCES `DocumentCategories` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
   CONSTRAINT `CHK_FormSchema_JSON` CHECK (JSON_VALID(`FormSchema`))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `Documents` (
+CREATE TABLE IF NOT EXISTS `Documents` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `TemplateId` INT NOT NULL,
   `InitiatorId` INT NOT NULL,
   `Status` VARCHAR(50) NULL DEFAULT 'DRAFT',
   `FinalDocumentHash` VARCHAR(256) NULL,
   `FinalPDFPath` LONGTEXT NULL,
-  `CreatedAt` DATETIME(6) NULL DEFAULT (UTC_TIMESTAMP(6)),
+  `CreatedAt` DATETIME(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   KEY `IX_Documents_TemplateId` (`TemplateId`),
   KEY `IX_Documents_InitiatorId` (`InitiatorId`),
@@ -89,9 +101,9 @@ CREATE TABLE `Documents` (
     FOREIGN KEY (`InitiatorId`) REFERENCES `Users` (`id`)
     ON DELETE RESTRICT
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `DocumentContents` (
+CREATE TABLE IF NOT EXISTS `DocumentContents` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `DocumentId` INT NOT NULL,
   `DataJson` JSON NOT NULL,
@@ -102,9 +114,9 @@ CREATE TABLE `DocumentContents` (
     ON DELETE CASCADE
     ON UPDATE CASCADE,
   CONSTRAINT `CHK_DataJson_JSON` CHECK (JSON_VALID(`DataJson`))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `DocumentSteps` (
+CREATE TABLE IF NOT EXISTS `DocumentSteps` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `DocumentId` INT NOT NULL,
   `StepOrder` INT NOT NULL,
@@ -116,9 +128,9 @@ CREATE TABLE `DocumentSteps` (
     FOREIGN KEY (`DocumentId`) REFERENCES `Documents` (`id`)
     ON DELETE CASCADE
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `DocumentTasks` (
+CREATE TABLE IF NOT EXISTS `DocumentTasks` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `StepId` INT NOT NULL,
   `DocumentId` INT NOT NULL,
@@ -159,14 +171,14 @@ CREATE TABLE `DocumentTasks` (
     FOREIGN KEY (`ProcessedByUserId`) REFERENCES `Users` (`id`)
     ON DELETE SET NULL
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `SignatureProfiles` (
+CREATE TABLE IF NOT EXISTS `SignatureProfiles` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `UserId` INT NOT NULL,
   `PublicKey` LONGTEXT NOT NULL,
   `EncryptedPrivateKey` LONGTEXT NOT NULL,
-  `CreatedAt` DATETIME(6) NULL DEFAULT (UTC_TIMESTAMP(6)),
+  `CreatedAt` DATETIME(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
   `isRevoked` TINYINT(1) NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `IX_SignatureProfiles_UserId` (`UserId`),
@@ -174,15 +186,15 @@ CREATE TABLE `SignatureProfiles` (
     FOREIGN KEY (`UserId`) REFERENCES `Users` (`id`)
     ON DELETE CASCADE
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `DigitalSignatures` (
+CREATE TABLE IF NOT EXISTS `DigitalSignatures` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `DocumentId` INT NOT NULL,
   `UserId` INT NOT NULL,
   `SignatureHex` LONGTEXT NOT NULL,
   `DocumentHashHex` VARCHAR(128) NULL,
-  `SignedAt` DATETIME(6) NULL DEFAULT (UTC_TIMESTAMP(6)),
+  `SignedAt` DATETIME(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   KEY `IX_DigitalSignatures_DocumentId` (`DocumentId`),
   KEY `IX_DigitalSignatures_UserId` (`UserId`),
@@ -194,9 +206,9 @@ CREATE TABLE `DigitalSignatures` (
     FOREIGN KEY (`UserId`) REFERENCES `Users` (`id`)
     ON DELETE CASCADE
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `DocumentUserViews` (
+CREATE TABLE IF NOT EXISTS `DocumentUserViews` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `DocumentId` INT NOT NULL,
   `UserId` INT NOT NULL,
@@ -212,9 +224,9 @@ CREATE TABLE `DocumentUserViews` (
     FOREIGN KEY (`UserId`) REFERENCES `Users` (`id`)
     ON DELETE CASCADE
     ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `WorkflowTemplates` (
+CREATE TABLE IF NOT EXISTS `WorkflowTemplates` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `TemplateId` INT NOT NULL,
   `StepOrder` INT NOT NULL,
@@ -244,9 +256,40 @@ CREATE TABLE `WorkflowTemplates` (
     FOREIGN KEY (`TargetDepartmentId`) REFERENCES `Departments` (`id`)
     ON DELETE SET NULL
     ON UPDATE CASCADE
-  -- NOTE: MySQL can reject CHECK that references columns participating in FK with referential actions.
-  -- Enforce the same rule via triggers below.
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `UserActivityLogs` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `UserId` INT NULL,
+  `Action` VARCHAR(80) NOT NULL,
+  `Detail` LONGTEXT NULL,
+  `CreatedAt` DATETIME(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `IX_UserActivityLogs_UserId` (`UserId`),
+  CONSTRAINT `FK_UserActivityLogs_UserId`
+    FOREIGN KEY (`UserId`) REFERENCES `Users` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `StaffDirectory` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `FullName` VARCHAR(255) NOT NULL,
+  `PositionId` INT NOT NULL,
+  `DepartmentId` INT NOT NULL,
+  `OneCId` VARCHAR(50) NULL,
+  `isActive` TINYINT(1) NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `IX_StaffDirectory_FullName` (`FullName`),
+  KEY `IX_StaffDirectory_Position` (`PositionId`),
+  CONSTRAINT `FK_StaffDirectory_Position`
+    FOREIGN KEY (`PositionId`) REFERENCES `Positions` (`id`),
+  CONSTRAINT `FK_StaffDirectory_Department`
+    FOREIGN KEY (`DepartmentId`) REFERENCES `Departments` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TRIGGER IF EXISTS `TRG_WorkflowTemplates_ValidateTarget_BI`;
+DROP TRIGGER IF EXISTS `TRG_WorkflowTemplates_ValidateTarget_BU`;
 
 DELIMITER $$
 
@@ -272,3 +315,7 @@ END$$
 
 DELIMITER ;
 
+INSERT IGNORE INTO `DocumentCategories` (`id`, `Name`, `SortOrder`, `isActive`) VALUES
+  (1, 'Отчёты', 10, 1),
+  (2, 'Приказы', 20, 1),
+  (3, 'Прочее', 90, 1);

@@ -37,6 +37,59 @@ def get_onec_config() -> dict:
     return cfg
 
 
+def _normalize_api_url(url: str | None) -> str | None:
+    if not url or not str(url).strip():
+        return None
+    trimmed = str(url).strip()
+    if not trimmed.startswith(("http://", "https://")):
+        return None
+    return trimmed.rstrip("/")
+
+
+def get_api_endpoints() -> list[dict]:
+    raw = load_runtime_config().get("api_endpoints", [])
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        u = _normalize_api_url(item.get("url"))
+        if not u:
+            continue
+        key = u.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        label = item.get("label")
+        lbl = str(label).strip() if isinstance(label, str) and label.strip() else None
+        out.append({"url": u, "label": lbl})
+    return out
+
+
+def set_api_endpoints(endpoints: list[dict]) -> list[dict]:
+    normalized: list[dict] = []
+    seen: set[str] = set()
+    for item in endpoints:
+        if not isinstance(item, dict):
+            continue
+        u = _normalize_api_url(item.get("url"))
+        if not u:
+            continue
+        key = u.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        label = item.get("label")
+        lbl = str(label).strip() if isinstance(label, str) and label.strip() else None
+        normalized.append({"url": u, "label": lbl})
+    root = load_runtime_config()
+    root["api_endpoints"] = normalized
+    save_runtime_config(root)
+    return normalized
+
+
 def patch_onec_config(*, base_url: str | None, username: str | None, password: str | None) -> dict:
     root = load_runtime_config()
     onec = dict(root.get("onec") or {})

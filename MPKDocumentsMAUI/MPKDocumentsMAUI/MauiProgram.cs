@@ -35,7 +35,12 @@ namespace MPKDocumentsMAUI
 
             // API + auth: BaseUrl из Resources/Raw/appsettings.txt (JSON, ключ Api:BaseUrl). Расширение .txt — обход dotnet/maui#17078 (iOS/macOS не принимают .json в MauiAsset).
             // Эмулятор Android к хосту: http://10.0.2.2:8000
-            builder.Services.AddSingleton<IApiEndpointStore>(_ => new ApiEndpointStore(LoadPackagedApiBaseUrl()));
+            builder.Services.AddSingleton<IApiEndpointStore>(sp =>
+            {
+                var store = new ApiEndpointStore(LoadPackagedApiBaseUrl());
+                store.AttachHttp(sp.GetRequiredService<HttpClient>());
+                return store;
+            });
             builder.Services.AddSingleton<ApiOptions>();
             builder.Services.AddSingleton<IApiPingLiveService, ApiPingLiveService>();
             // Явный таймаут: иначе при «молчащем» API кнопка «Отправляем…» висит бесконечно.
@@ -49,6 +54,7 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<ApiAuthenticationStateProvider>();
             builder.Services.AddSingleton<AuthenticationStateProvider>(sp => sp.GetRequiredService<ApiAuthenticationStateProvider>());
             builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddSingleton<IApiHostSettingsUi, ApiHostSettingsUi>();
             builder.Services.AddSingleton<IConnectionMonitorService, ConnectionMonitorService>();
             builder.Services.AddSingleton<IDocumentFeedWatchService, DocumentFeedWatchService>();
             builder.Services.AddSingleton<StaffRegisterApiClient>();

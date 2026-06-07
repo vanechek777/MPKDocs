@@ -273,7 +273,7 @@
 </div>
 
 @* Modals *@
-<OtpConfirmModal IsVisible="showOtp" DocumentName="@docName" PhoneHint="@phoneOtpHint"
+<OtpConfirmModal IsVisible="showOtp" DocumentName="@docName" EmailHint="@emailOtpHint"
                  OnClose="CloseOtpModal"
                  TrySubmitAsync="TrySubmitSignOtpAsync"
                  IsSubmitting="signOtpBusy"
@@ -313,7 +313,7 @@
     private long _attachmentProgressUiGate;
     private long _esigProgressUiGate;
     private string? documentSignedAtDisplay;
-    private string phoneOtpHint = "";
+    private string emailOtpHint = "";
 
     private string _leaveRoute = "/signing";
 
@@ -548,7 +548,7 @@
         }
         catch (Exception ex)
         {
-            loadError = $"Не удалось отправить SMS с кодом: {ex.Message}";
+            loadError = $"Не удалось отправить код на почту: {ex.Message}";
         }
         finally
         {
@@ -711,11 +711,11 @@
             try
             {
                 var me = await AuthApi.MeAsync();
-                phoneOtpHint = PhoneDisplay.MaskRu(me.phone_number);
+                emailOtpHint = EmailDisplay.Mask(me.email);
             }
             catch
             {
-                phoneOtpHint = "";
+                emailOtpHint = "";
             }
 
             var d = await DocsApi.GetDetailAsync(_docId.Value);

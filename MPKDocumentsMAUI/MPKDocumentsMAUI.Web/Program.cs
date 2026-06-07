@@ -26,6 +26,7 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IApiPingLiveService, ApiPingLiveService>();
             builder.Services.AddSingleton<INotificationPermissionService, WebNotificationPermissionService>();
             builder.Services.AddSingleton<AdminApiClient>();
+            builder.Services.AddSingleton<IApiHostSettingsUi, ApiHostSettingsUi>();
 
             var app = builder.Build();
 

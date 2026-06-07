@@ -458,7 +458,7 @@
 
 <OtpConfirmModal IsVisible="showOtp"
                  DocumentName="@fileName"
-                 PhoneHint="@otpPhoneHint"
+                 EmailHint="@otpEmailHint"
                  OnClose="CloseOtp"
                  OnConfirm="OnOtpConfirmCreate" />
 
@@ -499,7 +499,7 @@
             ? (int)Math.Clamp(100.0 * _uploadProgressRead / _uploadProgressTotal, 0, 100)
             : 0;
     private bool showOtp;
-    private string otpPhoneHint = "";
+    private string otpEmailHint = "";
     private string? otpCode;
     private int? _draftDocumentId;
     private bool _suppressDraftSave;
@@ -642,11 +642,11 @@
         try
         {
             var me = await AuthApi.MeAsync();
-            otpPhoneHint = PhoneDisplay.MaskRu(me.phone_number);
+            otpEmailHint = EmailDisplay.Mask(me.email);
         }
         catch
         {
-            otpPhoneHint = "";
+            otpEmailHint = "";
         }
         await LoadAsync();
         await TryRestorePrecategoryFromStorageAsync();
@@ -1304,7 +1304,7 @@
             }
             catch (Exception ex)
             {
-                loadError = $"Не удалось отправить SMS с кодом: {ex.Message}";
+                loadError = $"Не удалось отправить код на почту: {ex.Message}";
                 return;
             }
             showOtp = true;
