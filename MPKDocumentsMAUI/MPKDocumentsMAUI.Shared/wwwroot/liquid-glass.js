@@ -403,10 +403,160 @@
         applyReducedMotionFromStored(settingsGet(MPK_SETTINGS_KEYS.REDUCED_MOTION) || '0');
         applyCompactListsFromStored();
     }
+    function openExternalUrl(url) {
+        if (!url) return;
+        try {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        } catch (_) {}
+    }
+
     function tryHapticPulse() {
         try {
             if (navigator.vibrate) navigator.vibrate(18);
         } catch (_) {}
+    }
+
+    var MPK_RUS_KBD_KEY = 'mpk_rus_kbd';
+    var passwordInputState = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+    var passwordInputFallback = new Map();
+
+    function passwordInputKey(input) {
+        return input.id || input.name || String(input);
+    }
+
+    function getPasswordInputState(input) {
+        if (passwordInputState) return passwordInputState.get(input);
+        return passwordInputFallback.get(passwordInputKey(input));
+    }
+
+    function setPasswordInputState(input, state) {
+        if (passwordInputState) passwordInputState.set(input, state);
+        else passwordInputFallback.set(passwordInputKey(input), state);
+    }
+
+    function deletePasswordInputState(input) {
+        if (passwordInputState) passwordInputState.delete(input);
+        else passwordInputFallback.delete(passwordInputKey(input));
+    }
+
+    function isCyrillicKey(key) {
+        return !!(key && key.length === 1 && /[\u0400-\u04FF\u0451\u0401]/.test(key));
+    }
+
+    function isLatinKey(key) {
+        return !!(key && key.length === 1 && /[a-zA-Z]/.test(key));
+    }
+
+    function readStoredRusLayout() {
+        try {
+            var stored = sessionStorage.getItem(MPK_RUS_KBD_KEY);
+            if (stored === '1') return true;
+            if (stored === '0') return false;
+        } catch (_) {}
+        return false;
+    }
+
+    function storeRusLayout(isRus) {
+        try {
+            sessionStorage.setItem(MPK_RUS_KBD_KEY, isRus ? '1' : '0');
+        } catch (_) {}
+    }
+
+    function reportPasswordHints(state, capsLock, russianLayout) {
+        if (!state || !state.dotnetRef) return;
+        state.dotnetRef.invokeMethodAsync(
+            'OnPasswordInputHints',
+            capsLock,
+            russianLayout === undefined ? null : russianLayout
+        );
+    }
+
+    function handlePasswordKeyboard(state, e) {
+        if (!state.focused || document.activeElement !== state.input) return;
+
+        var caps = e.getModifierState ? e.getModifierState('CapsLock') : false;
+        var rus = state.lastRus;
+        var rusChanged = false;
+
+        if (isCyrillicKey(e.key)) {
+            rus = true;
+            rusChanged = true;
+            storeRusLayout(true);
+        } else if (isLatinKey(e.key)) {
+            rus = false;
+            rusChanged = true;
+            storeRusLayout(false);
+        }
+
+        state.lastCaps = caps;
+        state.lastRus = rus;
+        reportPasswordHints(state, caps, rusChanged ? rus : undefined);
+    }
+
+    function wirePasswordInput(input, dotnetRef) {
+        if (!input || !dotnetRef) return;
+        unwirePasswordInput(input);
+
+        var state = {
+            input: input,
+            dotnetRef: dotnetRef,
+            focused: false,
+            lastCaps: false,
+            lastRus: readStoredRusLayout(),
+            onKeyDown: function (e) { handlePasswordKeyboard(state, e); },
+            onKeyUp: function (e) {
+                if (!state.focused || document.activeElement !== state.input) return;
+                var caps = e.getModifierState ? e.getModifierState('CapsLock') : false;
+                state.lastCaps = caps;
+                reportPasswordHints(state, caps, undefined);
+            },
+            onInput: function () {
+                if (!state.focused) return;
+                var val = input.value || '';
+                if (!val.length) return;
+                var ch = val.charAt(val.length - 1);
+                var rusChanged = false;
+                if (/[\u0400-\u04FF\u0451\u0401]/.test(ch)) {
+                    state.lastRus = true;
+                    rusChanged = true;
+                    storeRusLayout(true);
+                } else if (/[a-zA-Z]/.test(ch)) {
+                    state.lastRus = false;
+                    rusChanged = true;
+                    storeRusLayout(false);
+                }
+                if (rusChanged) reportPasswordHints(state, state.lastCaps, state.lastRus);
+            },
+            onFocus: function () {
+                state.focused = true;
+                state.lastRus = readStoredRusLayout();
+                reportPasswordHints(state, state.lastCaps, state.lastRus);
+            },
+            onBlur: function () {
+                state.focused = false;
+                state.lastCaps = false;
+                reportPasswordHints(state, false, false);
+            }
+        };
+
+        input.addEventListener('keydown', state.onKeyDown);
+        input.addEventListener('keyup', state.onKeyUp);
+        input.addEventListener('input', state.onInput);
+        input.addEventListener('focus', state.onFocus);
+        input.addEventListener('blur', state.onBlur);
+        setPasswordInputState(input, state);
+    }
+
+    function unwirePasswordInput(input) {
+        if (!input) return;
+        var state = getPasswordInputState(input);
+        if (!state) return;
+        input.removeEventListener('keydown', state.onKeyDown);
+        input.removeEventListener('keyup', state.onKeyUp);
+        input.removeEventListener('input', state.onInput);
+        input.removeEventListener('focus', state.onFocus);
+        input.removeEventListener('blur', state.onBlur);
+        deletePasswordInputState(input);
     }
 
     window.MPKDocuments = window.MPKDocuments || {};
@@ -425,5 +575,8 @@
     window.MPKDocuments.tryHapticPulse = tryHapticPulse;
     window.MPKDocuments.applyCompactListsFromStored = applyCompactListsFromStored;
     window.MPKDocuments.scheduleLiquidGlassRebuild = scheduleLiquidGlassRebuild;
+    window.MPKDocuments.openExternalUrl = openExternalUrl;
+    window.MPKDocuments.wirePasswordInput = wirePasswordInput;
+    window.MPKDocuments.unwirePasswordInput = unwirePasswordInput;
     window.MPKDocuments.MPK_SETTINGS_KEYS = MPK_SETTINGS_KEYS;
 })();

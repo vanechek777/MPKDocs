@@ -1,4 +1,6 @@
-﻿namespace MPKDocumentsMAUI
+﻿using MPKDocumentsMAUI.Shared;
+
+namespace MPKDocumentsMAUI
 {
     public partial class App : Application
     {
@@ -11,7 +13,7 @@
         {
             var main = new MainPage();
             NavigationPage.SetHasNavigationBar(main, false);
-            return new Window(new NavigationPage(main)) { Title = "MPKDocumentsMAUI" };
+            return new Window(new NavigationPage(main)) { Title = AppBranding.DisplayName };
         }
     }
 }

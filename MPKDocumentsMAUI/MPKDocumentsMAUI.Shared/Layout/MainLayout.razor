@@ -7,6 +7,8 @@
 @implements IDisposable
 
 <ApiEndpointBootstrap />
+<AppUpdateHost />
+<DocumentFeedWatchHost />
 
 <div class="app-shell @(MobileShell.IsSigningOnlyShell ? "app-shell--mobile-signing" : null)">
     @if (MobileShell.IsSigningOnlyShell)

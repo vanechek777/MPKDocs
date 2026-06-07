@@ -9,7 +9,7 @@
 @inject MPKDocumentsMAUI.Shared.Api.IDocumentFeedWatchService FeedWatch
 @using MPKDocumentsMAUI.Shared.Api
 
-<PageTitle>Подпись документов — МПК Документы</PageTitle>
+<PageTitle>Подпись документов — @AppBranding.DisplayName</PageTitle>
 
 <div class="page-content">
     <!-- Header -->
@@ -438,7 +438,6 @@
     {
         Navigation.LocationChanged += OnNavigationLocationChanged;
         FeedWatch.FeedChanged += OnFeedChanged;
-        FeedWatch.Start();
         await LoadAsync();
     }
 
@@ -466,7 +465,6 @@
     {
         Navigation.LocationChanged -= OnNavigationLocationChanged;
         FeedWatch.FeedChanged -= OnFeedChanged;
-        FeedWatch.Stop();
     }
 
     private async Task LoadAsync()

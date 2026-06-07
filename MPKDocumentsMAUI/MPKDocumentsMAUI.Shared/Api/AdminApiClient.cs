@@ -213,4 +213,63 @@ public sealed class AdminApiClient
             ? items.Select(e => new ApiEndpointEntry(e.Url, e.Label)).ToList()
             : endpoints;
     }
+
+    public async Task<AdminAppReleaseDto> GetAppReleaseAsync(CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.GetAsync(U("/admin/app-release"), ct);
+        await ThrowIfFailedAsync(res, ct);
+        return (await res.Content.ReadFromJsonAsync<AdminAppReleaseDto>(JsonOpts, ct))!;
+    }
+
+    public async Task<AdminAppReleaseDto> SaveAppReleaseAsync(AdminAppReleaseSaveRequest body, CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.PutAsJsonAsync(U("/admin/app-release"), body, JsonOpts, ct);
+        await ThrowIfFailedAsync(res, ct);
+        return (await res.Content.ReadFromJsonAsync<AdminAppReleaseDto>(JsonOpts, ct))!;
+    }
+
+    public async Task<AdminAppReleaseSuggestDto> SuggestAppReleaseAsync(CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.GetAsync(U("/admin/app-release/suggest"), ct);
+        await ThrowIfFailedAsync(res, ct);
+        return (await res.Content.ReadFromJsonAsync<AdminAppReleaseSuggestDto>(JsonOpts, ct))!;
+    }
+
+    public async Task<IReadOnlyList<AdminAppReleaseFileDto>> ListReleaseFilesAsync(CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        var res = await _http.GetAsync(U("/admin/app-release/files"), ct);
+        await ThrowIfFailedAsync(res, ct);
+        return (await res.Content.ReadFromJsonAsync<List<AdminAppReleaseFileDto>>(JsonOpts, ct)) ?? [];
+    }
+
+    public async Task<AdminAppReleasePublishResultDto> PublishAppReleaseAsync(
+        Stream fileStream,
+        string fileName,
+        string version,
+        int build,
+        string platform,
+        int minBuild,
+        bool mandatory,
+        string? notes,
+        CancellationToken ct = default)
+    {
+        await AttachAuthAsync();
+        using var form = new MultipartFormDataContent();
+        form.Add(new StreamContent(fileStream), "file", fileName);
+        form.Add(new StringContent(version), "version");
+        form.Add(new StringContent(build.ToString()), "build");
+        form.Add(new StringContent(platform), "platform");
+        form.Add(new StringContent(minBuild.ToString()), "min_build");
+        form.Add(new StringContent(mandatory ? "true" : "false"), "mandatory");
+        if (!string.IsNullOrWhiteSpace(notes))
+            form.Add(new StringContent(notes), "notes");
+
+        var res = await _http.PostAsync(U("/admin/app-release/publish"), form, ct);
+        await ThrowIfFailedAsync(res, ct);
+        return (await res.Content.ReadFromJsonAsync<AdminAppReleasePublishResultDto>(JsonOpts, ct))!;
+    }
 }

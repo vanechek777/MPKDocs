@@ -40,7 +40,7 @@
                            name="api-base-url"
                            checked="@isActive"
                            disabled="@_busy"
-                           @onchange="() => SelectAsync(e.Url)" />
+                           @onchange="() => AskSelectAsync(e.Url)" />
                     <span class="api-endpoint-radio-body">
                         @if (!string.IsNullOrWhiteSpace(e.Label))
                         {
@@ -105,12 +105,30 @@
     </p>
 </div>
 
+@if (_confirmHostChange)
+{
+    <div class="modal-overlay" @onclick="CancelHostChange">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <div class="modal-header">Смена хоста</div>
+            <div class="modal-body">
+                <p style="margin:0">Вы уверены, что хотите поменять хост? После данной операции нужно будет сново войти в аккаунт</p>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:12px;justify-content:flex-end">
+                <button type="button" class="btn btn-secondary" @onclick="CancelHostChange">Отмена</button>
+                <button type="button" class="btn btn-red" disabled="@_busy" @onclick="ConfirmHostChangeAsync">Поменять</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     /// <summary>Добавление и удаление URL — только в админ-панели.</summary>
     [Parameter] public bool AllowManageEndpoints { get; set; }
 
     private bool _busy;
     private bool _pinging;
+    private bool _confirmHostChange;
+    private string? _pendingHostUrl;
     private string? _message;
     private bool _messageError;
     private string _newUrl = "";
@@ -120,12 +138,36 @@
     {
         Endpoints.AttachJs(JS);
         Endpoints.AttachHttp(Http);
-        if (!Endpoints.IsLoaded)
-            await Endpoints.LoadAsync();
-        else
-            await Endpoints.RefreshFromServerAsync();
+        await Endpoints.RefreshFromServerAsync();
+
+        if (AllowManageEndpoints)
+            await TryMigrateLegacyEndpointsToServerAsync();
+
         Endpoints.Changed += OnEndpointsChanged;
         PingLive.Changed += OnPingLiveChanged;
+    }
+
+    private async Task TryMigrateLegacyEndpointsToServerAsync()
+    {
+        if (await Endpoints.HasServerEndpointsAsync())
+            return;
+
+        var legacy = await Endpoints.ReadLegacyLocalEndpointsAsync();
+        if (legacy.Count <= 1)
+            return;
+
+        try
+        {
+            await AdminApi.SaveApiEndpointsAsync(legacy);
+            await Endpoints.RefreshFromServerAsync();
+            _message = "Список хостов перенесён на сервер — он будет виден на телефонах и других устройствах.";
+            _messageError = false;
+        }
+        catch (Exception ex)
+        {
+            _message = $"Не удалось сохранить хосты на сервер: {ex.Message}";
+            _messageError = true;
+        }
     }
 
     private void OnEndpointsChanged() => _ = InvokeAsync(StateHasChanged);
@@ -168,6 +210,32 @@
         if (PingLive.TryGet(url) is { } ping)
             return ping.Ok ? $"OK, {ping.LatencyMs} мс" : ping.Error;
         return "Ожидание первого замера…";
+    }
+
+    private void AskSelectAsync(string url)
+    {
+        if (string.Equals(url, Endpoints.ActiveBaseUrl, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _pendingHostUrl = url;
+        _confirmHostChange = true;
+    }
+
+    private void CancelHostChange()
+    {
+        _confirmHostChange = false;
+        _pendingHostUrl = null;
+    }
+
+    private async Task ConfirmHostChangeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_pendingHostUrl))
+            return;
+
+        var url = _pendingHostUrl;
+        _confirmHostChange = false;
+        _pendingHostUrl = null;
+        await SelectAsync(url);
     }
 
     private async Task SelectAsync(string url)

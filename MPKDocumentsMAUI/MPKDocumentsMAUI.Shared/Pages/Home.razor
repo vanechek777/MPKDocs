@@ -11,7 +11,7 @@
 @inject NavigationManager Navigation
 @inject IDocumentFeedWatchService FeedWatch
 
-<PageTitle>@(showArchive ? "Архив" : "Недавние") — МПК Документы</PageTitle>
+<PageTitle>@(showArchive ? "Архив" : "Недавние") — @AppBranding.DisplayName</PageTitle>
 
 <div class="page-content">
     <div class="page-header">
@@ -568,7 +568,6 @@
     {
         Navigation.LocationChanged += OnNavigationLocationChanged;
         FeedWatch.FeedChanged += OnFeedChanged;
-        FeedWatch.Start();
         try
         {
             var me = await AuthApi.MeAsync();
@@ -605,7 +604,6 @@
     {
         Navigation.LocationChanged -= OnNavigationLocationChanged;
         FeedWatch.FeedChanged -= OnFeedChanged;
-        FeedWatch.Stop();
     }
 
     private async Task LoadDocumentsAsync()

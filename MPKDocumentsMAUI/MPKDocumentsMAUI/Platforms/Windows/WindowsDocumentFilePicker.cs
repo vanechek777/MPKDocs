@@ -12,14 +12,20 @@ public sealed class WindowsDocumentFilePicker : IDocumentFilePicker
 
     private FileResult? _lastPick;
 
-    public async Task<DocumentPickInfo?> PickDocumentAsync(CancellationToken cancellationToken = default)
+    public Task<DocumentPickInfo?> PickDocumentAsync(CancellationToken cancellationToken = default) =>
+        PickFileAsync([".pdf", ".doc", ".docx"], "Выберите документ", cancellationToken);
+
+    public async Task<DocumentPickInfo?> PickFileAsync(
+        IReadOnlyList<string> extensions,
+        string? pickerTitle = null,
+        CancellationToken cancellationToken = default)
     {
         var result = await FilePicker.Default.PickAsync(new PickOptions
         {
-            PickerTitle = "Выберите документ",
+            PickerTitle = pickerTitle ?? "Выберите файл",
             FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
             {
-                [DevicePlatform.WinUI] = new[] { ".pdf", ".doc", ".docx" },
+                [DevicePlatform.WinUI] = extensions,
             }),
         });
 

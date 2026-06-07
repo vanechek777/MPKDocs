@@ -7,12 +7,18 @@ public sealed class AuthService
     private readonly AuthApiClient _api;
     private readonly IAuthTokenStore _tokenStore;
     private readonly ApiAuthenticationStateProvider _authState;
+    private readonly IDocumentFeedWatchService _feedWatch;
 
-    public AuthService(AuthApiClient api, IAuthTokenStore tokenStore, ApiAuthenticationStateProvider authState)
+    public AuthService(
+        AuthApiClient api,
+        IAuthTokenStore tokenStore,
+        ApiAuthenticationStateProvider authState,
+        IDocumentFeedWatchService feedWatch)
     {
         _api = api;
         _tokenStore = tokenStore;
         _authState = authState;
+        _feedWatch = feedWatch;
     }
 
     public async Task<bool> TryWarmUpAsync()
@@ -23,6 +29,7 @@ public sealed class AuthService
         try
         {
             await _api.MeAsync();
+            _feedWatch.Reset();
             _authState.NotifyAuthChanged();
             return true;
         }
@@ -41,6 +48,7 @@ public sealed class AuthService
         var token = await _api.LoginAsync(
             new LoginRequest(PhoneDisplay.NormalizeE164(phoneNumber), password));
         await _tokenStore.SetAccessTokenAsync(token.access_token);
+        _feedWatch.Reset();
         _authState.NotifyAuthChanged();
     }
 
@@ -49,6 +57,7 @@ public sealed class AuthService
         var token = await _api.VerifyEmailLoginAsync(
             new EmailLoginVerifyRequest(NormalizeEmail(email), code.Trim()));
         await _tokenStore.SetAccessTokenAsync(token.access_token);
+        _feedWatch.Reset();
         _authState.NotifyAuthChanged();
     }
 
@@ -67,6 +76,7 @@ public sealed class AuthService
         var token = await _api.VerifyRegisterEmailAsync(
             new RegisterEmailVerifyRequest(NormalizeEmail(email), code.Trim()));
         await _tokenStore.SetAccessTokenAsync(token.access_token);
+        _feedWatch.Reset();
         _authState.NotifyAuthChanged();
     }
 
@@ -85,6 +95,7 @@ public sealed class AuthService
     public async Task LogoutAsync()
     {
         await _tokenStore.ClearAsync();
+        _feedWatch.Reset();
         _authState.NotifyAuthChanged();
     }
 }

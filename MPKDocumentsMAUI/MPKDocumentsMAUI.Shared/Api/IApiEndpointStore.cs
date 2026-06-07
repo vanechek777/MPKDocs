@@ -22,6 +22,12 @@ public interface IApiEndpointStore
 
     Task RefreshFromServerAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Список из localStorage (старый формат), без изменения текущего состояния.</summary>
+    Task<IReadOnlyList<ApiEndpointEntry>> ReadLegacyLocalEndpointsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>На сервере уже сохранён непустой список хостов (не legacy localStorage).</summary>
+    Task<bool> HasServerEndpointsAsync(CancellationToken cancellationToken = default);
+
     Task SetActiveAsync(string url, CancellationToken cancellationToken = default);
 
     Task ApplyServerEndpointsAsync(IReadOnlyList<ApiEndpointEntry> endpoints, CancellationToken cancellationToken = default);

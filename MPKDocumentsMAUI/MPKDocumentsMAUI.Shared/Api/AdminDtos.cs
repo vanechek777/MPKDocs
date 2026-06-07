@@ -69,6 +69,57 @@ public sealed record AdminTemplateCreateRequest(
     [property: JsonPropertyName("template_path")] string? TemplatePath,
     [property: JsonPropertyName("form_schema")] Dictionary<string, object?>? FormSchema);
 
+public sealed record AdminAppReleaseDto(
+    [property: JsonPropertyName("configured")] bool Configured,
+    [property: JsonPropertyName("version")] string? Version,
+    [property: JsonPropertyName("build")] int? Build,
+    [property: JsonPropertyName("min_build")] int MinBuild,
+    [property: JsonPropertyName("mandatory")] bool Mandatory,
+    [property: JsonPropertyName("notes")] string? Notes,
+    [property: JsonPropertyName("windows_url")] string? WindowsUrl,
+    [property: JsonPropertyName("android_url")] string? AndroidUrl,
+    [property: JsonPropertyName("ios_url")] string? IosUrl,
+    [property: JsonPropertyName("web_url")] string? WebUrl);
+
+public sealed record AdminAppReleaseSuggestDto(
+    [property: JsonPropertyName("version")] string Version,
+    [property: JsonPropertyName("build")] int Build,
+    [property: JsonPropertyName("previous_version")] string? PreviousVersion,
+    [property: JsonPropertyName("previous_build")] int? PreviousBuild);
+
+public sealed record AdminAppReleaseFileDto(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("modified_utc")] long ModifiedUtc);
+
+public sealed record AdminAppReleasePublishResultDto(
+    [property: JsonPropertyName("configured")] bool Configured,
+    [property: JsonPropertyName("version")] string? Version,
+    [property: JsonPropertyName("build")] int? Build,
+    [property: JsonPropertyName("min_build")] int MinBuild,
+    [property: JsonPropertyName("mandatory")] bool Mandatory,
+    [property: JsonPropertyName("notes")] string? Notes,
+    [property: JsonPropertyName("windows_url")] string? WindowsUrl,
+    [property: JsonPropertyName("android_url")] string? AndroidUrl,
+    [property: JsonPropertyName("ios_url")] string? IosUrl,
+    [property: JsonPropertyName("web_url")] string? WebUrl,
+    [property: JsonPropertyName("download_url")] string DownloadUrl,
+    [property: JsonPropertyName("stored_file")] string StoredFile,
+    [property: JsonPropertyName("file_size_bytes")] long FileSizeBytes,
+    [property: JsonPropertyName("platform")] string Platform,
+    [property: JsonPropertyName("release_files")] List<AdminAppReleaseFileDto>? ReleaseFiles);
+
+public sealed record AdminAppReleaseSaveRequest(
+    [property: JsonPropertyName("version")] string Version,
+    [property: JsonPropertyName("build")] int Build,
+    [property: JsonPropertyName("min_build")] int MinBuild,
+    [property: JsonPropertyName("mandatory")] bool Mandatory,
+    [property: JsonPropertyName("notes")] string? Notes,
+    [property: JsonPropertyName("windows_url")] string? WindowsUrl,
+    [property: JsonPropertyName("android_url")] string? AndroidUrl,
+    [property: JsonPropertyName("ios_url")] string? IosUrl,
+    [property: JsonPropertyName("web_url")] string? WebUrl);
+
 public sealed record AdminTemplatePatchRequest(
     [property: JsonPropertyName("is_active")] bool? IsActive = null,
     [property: JsonPropertyName("category_id")] int? CategoryId = null,

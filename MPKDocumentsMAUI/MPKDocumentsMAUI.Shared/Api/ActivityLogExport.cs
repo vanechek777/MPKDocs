@@ -14,7 +14,7 @@ public static class ActivityLogExport
     {
         var lines = new List<string>
         {
-            "Журнал действий — МПК Документы",
+            $"Журнал действий — {AppBranding.DisplayName}",
             $"Сформировано (UTC): {DateTime.UtcNow:yyyy-MM-ddTHH:mm:ss.ffffff}",
         };
         if (from is not null || to is not null)

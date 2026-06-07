@@ -1,0 +1,5 @@
+@inject MPKDocumentsMAUI.Shared.Api.IDocumentFeedWatchService FeedWatch
+
+@code {
+    protected override void OnInitialized() => FeedWatch.Start();
+}

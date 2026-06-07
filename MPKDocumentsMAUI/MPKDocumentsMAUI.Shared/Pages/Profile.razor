@@ -6,10 +6,11 @@
 @inject INotificationPermissionService Notifications
 @inject MPKDocumentsMAUI.Shared.Services.IMobileShellService MobileShell
 @inject MPKDocumentsMAUI.Shared.Services.IApiHostSettingsUi HostSettingsUi
+@inject IAppUpdateService AppUpdates
 @using System.Net.Http
 @using MPKDocumentsMAUI.Shared.Api
 
-<PageTitle>Профиль — МПК Документы</PageTitle>
+<PageTitle>Профиль — @AppBranding.DisplayName</PageTitle>
 
 <div class="page-content">
     @if (loadError is not null)
@@ -118,6 +119,46 @@
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
+                <button type="button"
+                        class="profile-menu-item @(_updateBusy ? "profile-menu-item--busy" : null)"
+                        disabled="@_updateBusy"
+                        @onclick="CheckUpdatesAsync">
+                    <span class="profile-menu-item-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </span>
+                    <span class="profile-menu-item-text">
+                        <span class="profile-menu-item-title">Проверить обновления</span>
+                        <span class="profile-menu-item-desc">@GetUpdateMenuDesc()</span>
+                    </span>
+                    <span class="profile-menu-item-trailing">
+                        @if (_updateBusy)
+                        {
+                            <span class="mpk-spinner mpk-spinner--sm" aria-hidden="true"></span>
+                        }
+                        else if (_updateStatus == "ok")
+                        {
+                            <span class="profile-menu-badge profile-menu-badge--ok">Актуально</span>
+                        }
+                        else if (_updateStatus == "available")
+                        {
+                            <span class="profile-menu-badge profile-menu-badge--new">Есть новая</span>
+                        }
+                        else if (_updateStatus == "error")
+                        {
+                            <span class="profile-menu-badge profile-menu-badge--err">Ошибка</span>
+                        }
+                        else
+                        {
+                            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                        }
+                    </span>
+                </button>
             </div>
         </div>
 
@@ -230,6 +271,9 @@
     private bool reduceMotion;
     private bool hapticsEnabled = true;
     private bool compactLists;
+    private bool _updateBusy;
+    private string? _updateMessage;
+    private string? _updateStatus;
 
     private string editName = "";
     private string editPhone = "";
@@ -417,6 +461,47 @@
         finally
         {
             _busy = false;
+        }
+    }
+
+    private string GetUpdateMenuDesc()
+    {
+        if (!string.IsNullOrWhiteSpace(_updateMessage))
+            return _updateMessage;
+        return $"Версия {AppVersionInfo.FullLabel}";
+    }
+
+    private async Task CheckUpdatesAsync()
+    {
+        if (_updateBusy) return;
+        _updateBusy = true;
+        _updateMessage = null;
+        _updateStatus = null;
+        try
+        {
+            var result = await AppUpdates.CheckForUpdatesAsync(force: true);
+            if (!string.IsNullOrWhiteSpace(result.Error))
+            {
+                _updateMessage = $"Не удалось проверить: {result.Error}";
+                _updateStatus = "error";
+                return;
+            }
+
+            if (result.UpdateAvailable)
+            {
+                _updateMessage = result.Mandatory
+                    ? "Обязательное обновление — откроется окно загрузки"
+                    : "Доступна новая версия — откроется окно загрузки";
+                _updateStatus = "available";
+                return;
+            }
+
+            _updateMessage = "У вас установлена актуальная версия";
+            _updateStatus = "ok";
+        }
+        finally
+        {
+            _updateBusy = false;
         }
     }
 

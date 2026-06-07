@@ -12,10 +12,7 @@
         {
             ApiEndpoints.AttachJs(JS);
             ApiEndpoints.AttachHttp(Http);
-            if (!ApiEndpoints.IsLoaded)
-                await ApiEndpoints.LoadAsync();
-            else
-                await ApiEndpoints.RefreshFromServerAsync();
+            await ApiEndpoints.RefreshFromServerAsync();
 
             await JS.InvokeVoidAsync("MPKDocuments.bootstrapUxFromStorage");
         }

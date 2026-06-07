@@ -8,6 +8,12 @@ public sealed class NullDocumentFilePicker : IDocumentFilePicker
     public Task<DocumentPickInfo?> PickDocumentAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<DocumentPickInfo?>(null);
 
+    public Task<DocumentPickInfo?> PickFileAsync(
+        IReadOnlyList<string> extensions,
+        string? pickerTitle = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<DocumentPickInfo?>(null);
+
     public Task<byte[]?> TryReadLastNativePickAsync(int maxBytes = 25 * 1024 * 1024, CancellationToken cancellationToken = default) =>
         Task.FromResult<byte[]?>(null);
 }

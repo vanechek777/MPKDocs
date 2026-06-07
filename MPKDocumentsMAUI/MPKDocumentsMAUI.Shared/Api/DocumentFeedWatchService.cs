@@ -2,7 +2,7 @@ namespace MPKDocumentsMAUI.Shared.Api;
 
 public sealed class DocumentFeedWatchService : IDocumentFeedWatchService, IAsyncDisposable
 {
-    public static readonly TimeSpan Interval = TimeSpan.FromSeconds(6);
+    public static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
     private readonly DocumentsApiClient _docs;
     private CancellationTokenSource? _cts;
@@ -33,6 +33,8 @@ public sealed class DocumentFeedWatchService : IDocumentFeedWatchService, IAsync
             _cts = null;
         }
     }
+
+    public void Reset() => LastStamp = null;
 
     private async Task RunAsync(CancellationToken ct)
     {

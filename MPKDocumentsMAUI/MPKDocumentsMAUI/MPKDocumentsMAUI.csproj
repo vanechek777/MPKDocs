@@ -1,18 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
-
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
     <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
     <!-- <TargetFrameworks>$(TargetFrameworks);net9.0-tizen</TargetFrameworks> -->
-
     <!-- Note for MacCatalyst:
       The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
       When specifying both architectures, use the plural <RuntimeIdentifiers> instead of the singular <RuntimeIdentifier>.
       The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
       either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
     <!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
-
     <OutputType>Exe</OutputType>
     <RootNamespace>MPKDocumentsMAUI</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -20,20 +18,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDefaultCssItems>false</EnableDefaultCssItems>
     <Nullable>enable</Nullable>
-
-    <!-- Display name -->
-    <ApplicationTitle>MPKDocumentsMAUI</ApplicationTitle>
-
+    <!-- Отображаемое имя на телефоне, в меню Пуск и в заголовке окна -->
+    <ApplicationTitle>МПК.Документы</ApplicationTitle>
     <!-- App Identifier -->
     <ApplicationId>com.companyname.mpkdocumentsmaui</ApplicationId>
-
-    <!-- Versions -->
-    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
-    <ApplicationVersion>1</ApplicationVersion>
-
+    <!-- Versions: меняйте перед сборкой установщика (или через publish-release.ps1 -Version … -Build …) -->
+    <ApplicationDisplayVersion>1.0.4</ApplicationDisplayVersion>
+    <ApplicationVersion>4</ApplicationVersion>
+    <Version>1.0.4</Version>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
+    <FileVersion>1.0.4.0</FileVersion>
+    <InformationalVersion>1.0.4</InformationalVersion>
     <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
     <WindowsPackageType>None</WindowsPackageType>
-
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
@@ -41,24 +38,20 @@
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>
   </PropertyGroup>
-
   <ItemGroup>
-    <!-- App Icon -->
-    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
-
-    <!-- Splash Screen -->
-    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
-
+    <!-- Иконка: положите Resources\AppIcon\appicon.png (1024×1024) — см. Resources\AppIcon\README.md -->
+    <MauiIcon Include="Resources\AppIcon\appicon.png" Condition="Exists('Resources\AppIcon\appicon.png')" />
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" Condition="!Exists('Resources\AppIcon\appicon.png')" />
+    <!-- Splash: опционально Resources\Splash\splash.png -->
+    <MauiSplashScreen Include="Resources\Splash\splash.png" Color="#121212" BaseSize="256,256" Condition="Exists('Resources\Splash\splash.png')" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#121212" BaseSize="128,128" Condition="!Exists('Resources\Splash\splash.png')" />
     <!-- Images -->
     <MauiImage Include="Resources\Images\*" />
     <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
-
     <!-- Шрифты: добавьте MauiFont при появлении файлов в Resources/Fonts/ -->
-
     <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
@@ -67,14 +60,21 @@
     <PackageReference Include="ZXing.Net.Maui" Version="0.6.0" />
     <PackageReference Include="ZXing.Net.Maui.Controls" Version="0.6.0" />
   </ItemGroup>
-
   <!-- Явная версия WebView2: обход известных сбоев инициализации BlazorWebView на WinUI (см. dotnet/maui#26003, WebView2Feedback#5104). -->
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\MPKDocumentsMAUI.Shared\MPKDocumentsMAUI.Shared.csproj" />
   </ItemGroup>
-
+  <ItemGroup>
+    <AssemblyMetadata Include="MpkBuild" Value="$(ApplicationVersion)" />
+  </ItemGroup>
+  <!-- Файл версии в папке приложения — AppVersionInfo читает его при старте -->
+  <Target Name="GenerateAppVersionJson" BeforeTargets="PrepareForBuild">
+    <WriteLinesToFile File="$(MSBuildThisFileDirectory)Resources\Raw\appversion.json" Lines="{&quot;version&quot;:&quot;$(ApplicationDisplayVersion)&quot;,&quot;build&quot;:$(ApplicationVersion)}" Overwrite="true" />
+  </Target>
+  <Target Name="CopyAppVersionJsonToOutput" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Resources\Raw\appversion.json" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
+  </Target>
 </Project>

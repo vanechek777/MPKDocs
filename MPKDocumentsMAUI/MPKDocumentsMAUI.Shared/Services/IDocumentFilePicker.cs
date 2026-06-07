@@ -10,6 +10,12 @@ public interface IDocumentFilePicker
 
     Task<DocumentPickInfo?> PickDocumentAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Нативный диалог с произвольными расширениями (установщики, архивы и т.д.).</summary>
+    Task<DocumentPickInfo?> PickFileAsync(
+        IReadOnlyList<string> extensions,
+        string? pickerTitle = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Последний выбор через нативный диалог (MAUI): прочитать байты файла. В Web — null.</summary>
     Task<byte[]?> TryReadLastNativePickAsync(int maxBytes = 25 * 1024 * 1024, CancellationToken cancellationToken = default);
 }

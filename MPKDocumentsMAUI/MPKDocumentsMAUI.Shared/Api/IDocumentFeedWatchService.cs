@@ -9,4 +9,7 @@ public interface IDocumentFeedWatchService
 
     void Start();
     void Stop();
+
+    /// <summary>Сбросить метку (после входа/выхода — следующий poll обновит ленту).</summary>
+    void Reset();
 }

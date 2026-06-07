@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using MPKDocumentsMAUI.Services;
+using MPKDocumentsMAUI.Shared;
 using MPKDocumentsMAUI.Shared.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using MPKDocumentsMAUI.Shared.Auth;
@@ -27,8 +29,10 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IFileDownloadService, MauiFileDownloadService>();
 #if WINDOWS
             builder.Services.AddSingleton<IDocumentFilePicker, Platforms.Windows.WindowsDocumentFilePicker>();
+            builder.Services.AddSingleton<IReleaseBuildService, Platforms.Windows.WindowsReleaseBuildService>();
 #else
             builder.Services.AddSingleton<IDocumentFilePicker, NullDocumentFilePicker>();
+            builder.Services.AddSingleton<IReleaseBuildService, NullReleaseBuildService>();
 #endif
 
             builder.Services.AddMauiBlazorWebView();
@@ -59,13 +63,50 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IDocumentFeedWatchService, DocumentFeedWatchService>();
             builder.Services.AddSingleton<StaffRegisterApiClient>();
             builder.Services.AddSingleton<INotificationPermissionService, NotificationPermissionService>();
+            builder.Services.AddSingleton<IAppUpdateService, AppUpdateService>();
 
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();
             builder.Logging.AddDebug();
 #endif
 
-            return builder.Build();
+            var app = builder.Build();
+            ConfigureAppVersion();
+            return app;
+        }
+
+        private static void ConfigureAppVersion()
+        {
+            try
+            {
+                var version = AppInfo.Current.VersionString?.Trim();
+                var buildText = AppInfo.Current.BuildString?.Trim();
+                if (!string.IsNullOrWhiteSpace(version)
+                    && int.TryParse(buildText, out var build)
+                    && build > 0)
+                {
+                    AppVersionInfo.Configure(version, build);
+                    return;
+                }
+            }
+            catch
+            {
+                /* AppInfo недоступен до полной инициализации платформы */
+            }
+
+            try
+            {
+                using var stream = FileSystem.OpenAppPackageFileAsync("appversion.json").GetAwaiter().GetResult();
+                using var doc = JsonDocument.Parse(stream);
+                var version = doc.RootElement.GetProperty("version").GetString();
+                var build = doc.RootElement.GetProperty("build").GetInt32();
+                if (!string.IsNullOrWhiteSpace(version) && build > 0)
+                    AppVersionInfo.Configure(version, build);
+            }
+            catch
+            {
+                /* остаётся чтение appversion.json / MPKDocumentsMAUI.dll */
+            }
         }
 
         private static string? LoadPackagedApiBaseUrl()

@@ -7,7 +7,12 @@ namespace MPKDocumentsMAUI.Shared.Api;
 
 public sealed class ApiEndpointStore : IApiEndpointStore
 {
-    public const string DefaultBaseUrl = "https://mpk-docs.ru.tuna.am";
+    public const string DefaultBaseUrl = "https://mpk-docs.ru";
+    private static readonly string[] KnownBootstrapUrls =
+    [
+        "https://mpk-docs.ru",
+        "https://mpk-docs.ru.tuna.am",
+    ];
     private const string LegacyStorageKey = "mpk_api_endpoints_v1";
     private const string ActiveStorageKey = "mpk_api_active_v1";
 
@@ -55,6 +60,7 @@ public sealed class ApiEndpointStore : IApiEndpointStore
         if (fromServer is { Count: > 0 })
         {
             _endpoints = fromServer;
+            EnsurePackagedDefaultInList();
         }
         else
         {
@@ -65,6 +71,36 @@ public sealed class ApiEndpointStore : IApiEndpointStore
         await RestoreActiveFromLocalAsync(cancellationToken);
         _loaded = true;
         Changed?.Invoke();
+    }
+
+    public async Task<bool> HasServerEndpointsAsync(CancellationToken cancellationToken = default)
+    {
+        var fromServer = await TryFetchServerEndpointsAsync(cancellationToken);
+        return fromServer is { Count: > 0 };
+    }
+
+    public async Task<IReadOnlyList<ApiEndpointEntry>> ReadLegacyLocalEndpointsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_js is null)
+            return [];
+
+        try
+        {
+            var json = await _js.InvokeAsync<string?>("MPKDocuments.settingsGet", cancellationToken, LegacyStorageKey);
+            if (string.IsNullOrWhiteSpace(json))
+                return [];
+
+            var state = JsonSerializer.Deserialize<LegacyPersistedState>(json, JsonOpts);
+            if (state?.Endpoints is not { Count: > 0 })
+                return [];
+
+            return NormalizeEntries(state.Endpoints.Select(e => new ApiEndpointEntry(e.Url, e.Label)));
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     public async Task SetActiveAsync(string url, CancellationToken cancellationToken = default)
@@ -132,8 +168,11 @@ public sealed class ApiEndpointStore : IApiEndpointStore
         {
             try
             {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(20));
+
                 var uri = new Uri(new Uri(baseUrl.TrimEnd('/') + "/"), "config/api-endpoints");
-                var response = await _http.GetFromJsonAsync<ServerEndpointsPayload>(uri, JsonOpts, cancellationToken);
+                var response = await _http.GetFromJsonAsync<ServerEndpointsPayload>(uri, JsonOpts, cts.Token);
                 if (response?.Endpoints is not { Count: > 0 } list)
                     continue;
 
@@ -153,7 +192,14 @@ public sealed class ApiEndpointStore : IApiEndpointStore
     private IEnumerable<string> BootstrapUrls()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var candidate in new[] { _packagedDefault, _active })
+        IEnumerable<string?> candidates =
+        [
+            _active,
+            _packagedDefault,
+            .._endpoints.Select(e => e.Url),
+        ];
+
+        foreach (var candidate in candidates.Concat(KnownBootstrapUrls))
         {
             var u = NormalizeUrl(candidate);
             if (u is null || !seen.Add(u))

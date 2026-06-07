@@ -14,11 +14,11 @@
                 <div class="auth-subtitle">
                     @if (_kind == LoginKind.Password)
                     {
-                        <text>МПК Документы — номер телефона и пароль</text>
+                        <text>@AppBranding.DisplayName — номер телефона и пароль</text>
                     }
                     else
                     {
-                        <text>МПК Документы — код на почту</text>
+                        <text>@AppBranding.DisplayName — код на почту</text>
                     }
                 </div>
             </div>
@@ -51,8 +51,7 @@
 
             <div class="form-group">
                 <label class="form-label">Пароль</label>
-                <InputText class="form-input" type="password" autocomplete="current-password"
-                           @bind-Value="_password" />
+                <PasswordInput @bind-Value="_password" Autocomplete="current-password" />
             </div>
 
             <div class="auth-actions">
