@@ -49,8 +49,8 @@
     <MauiImage Include="Resources\Images\*" />
     <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
     <!-- Шрифты: добавьте MauiFont при появлении файлов в Resources/Fonts/ -->
-    <!-- Raw Assets (also remove the "Resources/Raw" prefix). appversion.txt — только для Windows-сборки, не в бандл. -->
-    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" Exclude="Resources/Raw/appversion.txt" />
+    <!-- Raw Assets (also remove the "Resources/Raw" prefix). Файлы appversion.* не в бандл — только Windows output. -->
+    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" Exclude="Resources/Raw/appversion.*" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
@@ -70,11 +70,14 @@
   <ItemGroup>
     <AssemblyMetadata Include="MpkBuild" Value="$(ApplicationVersion)" />
   </ItemGroup>
-  <!-- Файл версии рядом с .exe — только Windows (установщик / publish-release.ps1) -->
+  <!-- Файл версии рядом с .exe — только Windows (установщик / publish-release.ps1), не в Resources/Raw -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+    <_AppVersionJsonPath>$(IntermediateOutputPath)appversion.json</_AppVersionJsonPath>
+  </PropertyGroup>
   <Target Name="GenerateAppVersionJson" BeforeTargets="PrepareForBuild" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
-    <WriteLinesToFile File="$(MSBuildThisFileDirectory)Resources/Raw/appversion.txt" Lines="{&quot;version&quot;:&quot;$(ApplicationDisplayVersion)&quot;,&quot;build&quot;:$(ApplicationVersion)}" Overwrite="true" />
+    <WriteLinesToFile File="$(_AppVersionJsonPath)" Lines="{&quot;version&quot;:&quot;$(ApplicationDisplayVersion)&quot;,&quot;build&quot;:$(ApplicationVersion)}" Overwrite="true" />
   </Target>
   <Target Name="CopyAppVersionJsonToOutput" AfterTargets="Build" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Resources/Raw/appversion.txt" DestinationFiles="$(OutputPath)appversion.json" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(_AppVersionJsonPath)" DestinationFiles="$(OutputPath)appversion.json" SkipUnchangedFiles="false" />
   </Target>
 </Project>

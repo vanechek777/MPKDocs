@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Xml.Linq;
 
 namespace MPKDocumentsMAUI.Shared.Services;
@@ -39,12 +38,6 @@ public static class CsprojVersionWriter
         SetProperty(doc, ns, "FileVersion", $"{version}.0");
         SetProperty(doc, ns, "InformationalVersion", version);
         doc.Save(csprojPath);
-
-        var rawDir = Path.Combine(Path.GetDirectoryName(csprojPath)!, "Resources", "Raw");
-        Directory.CreateDirectory(rawDir);
-        var versionPath = Path.Combine(rawDir, "appversion.txt");
-        var json = JsonSerializer.Serialize(new { version, build });
-        File.WriteAllText(versionPath, json);
     }
 
     private static string? ReadProperty(XDocument doc, XNamespace ns, string name) =>
