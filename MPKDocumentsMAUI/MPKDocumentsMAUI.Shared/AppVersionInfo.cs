@@ -81,7 +81,9 @@ public static class AppVersionInfo
     {
         var baseDir = AppContext.BaseDirectory;
         yield return Path.Combine(baseDir, "appversion.json");
+        yield return Path.Combine(baseDir, "appversion.txt");
         yield return Path.Combine(baseDir, "Resources", "Raw", "appversion.json");
+        yield return Path.Combine(baseDir, "Resources", "Raw", "appversion.txt");
     }
 
     private static bool TryParseVersionFile(string path, out string display, out int build)

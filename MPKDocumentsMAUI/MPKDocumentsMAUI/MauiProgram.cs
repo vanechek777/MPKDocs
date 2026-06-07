@@ -94,18 +94,24 @@ namespace MPKDocumentsMAUI
                 /* AppInfo недоступен до полной инициализации платформы */
             }
 
-            try
+            foreach (var assetName in new[] { "appversion.txt", "appversion.json" })
             {
-                using var stream = FileSystem.OpenAppPackageFileAsync("appversion.json").GetAwaiter().GetResult();
-                using var doc = JsonDocument.Parse(stream);
-                var version = doc.RootElement.GetProperty("version").GetString();
-                var build = doc.RootElement.GetProperty("build").GetInt32();
-                if (!string.IsNullOrWhiteSpace(version) && build > 0)
-                    AppVersionInfo.Configure(version, build);
-            }
-            catch
-            {
-                /* остаётся чтение appversion.json / MPKDocumentsMAUI.dll */
+                try
+                {
+                    using var stream = FileSystem.OpenAppPackageFileAsync(assetName).GetAwaiter().GetResult();
+                    using var doc = JsonDocument.Parse(stream);
+                    var version = doc.RootElement.GetProperty("version").GetString();
+                    var build = doc.RootElement.GetProperty("build").GetInt32();
+                    if (!string.IsNullOrWhiteSpace(version) && build > 0)
+                    {
+                        AppVersionInfo.Configure(version, build);
+                        return;
+                    }
+                }
+                catch
+                {
+                    /* пробуем следующий MauiAsset */
+                }
             }
         }
 

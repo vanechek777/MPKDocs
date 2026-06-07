@@ -49,10 +49,8 @@
     <MauiImage Include="Resources\Images\*" />
     <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
     <!-- Шрифты: добавьте MauiFont при появлении файлов в Resources/Fonts/ -->
-    <!-- Raw Assets (also remove the "Resources/Raw" prefix) -->
-    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" Exclude="Resources/Raw/appversion.json" />
-    <!-- Явный LogicalName: иначе на iOS путь с %(RecursiveDir) уходит за пределы .app -->
-    <MauiAsset Include="Resources/Raw/appversion.json" LogicalName="appversion.json" Link="appversion.json" />
+    <!-- Raw Assets (also remove the "Resources/Raw" prefix). Версия — appversion.txt, не .json (dotnet/maui#17078). -->
+    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
@@ -72,11 +70,11 @@
   <ItemGroup>
     <AssemblyMetadata Include="MpkBuild" Value="$(ApplicationVersion)" />
   </ItemGroup>
-  <!-- Файл версии: в бандле (MauiAsset) и рядом с .exe на Windows -->
+  <!-- Файл версии: MauiAsset appversion.txt; на Windows — копия как appversion.json рядом с .exe -->
   <Target Name="GenerateAppVersionJson" BeforeTargets="PrepareForBuild">
-    <WriteLinesToFile File="$(MSBuildThisFileDirectory)Resources/Raw/appversion.json" Lines="{&quot;version&quot;:&quot;$(ApplicationDisplayVersion)&quot;,&quot;build&quot;:$(ApplicationVersion)}" Overwrite="true" />
+    <WriteLinesToFile File="$(MSBuildThisFileDirectory)Resources/Raw/appversion.txt" Lines="{&quot;version&quot;:&quot;$(ApplicationDisplayVersion)&quot;,&quot;build&quot;:$(ApplicationVersion)}" Overwrite="true" />
   </Target>
   <Target Name="CopyAppVersionJsonToOutput" AfterTargets="Build" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Resources/Raw/appversion.json" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Resources/Raw/appversion.txt" DestinationFiles="$(OutputPath)appversion.json" SkipUnchangedFiles="false" />
   </Target>
 </Project>

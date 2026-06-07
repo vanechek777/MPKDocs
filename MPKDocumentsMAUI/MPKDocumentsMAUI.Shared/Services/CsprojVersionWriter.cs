@@ -42,9 +42,9 @@ public static class CsprojVersionWriter
 
         var rawDir = Path.Combine(Path.GetDirectoryName(csprojPath)!, "Resources", "Raw");
         Directory.CreateDirectory(rawDir);
-        var jsonPath = Path.Combine(rawDir, "appversion.json");
+        var versionPath = Path.Combine(rawDir, "appversion.txt");
         var json = JsonSerializer.Serialize(new { version, build });
-        File.WriteAllText(jsonPath, json);
+        File.WriteAllText(versionPath, json);
     }
 
     private static string? ReadProperty(XDocument doc, XNamespace ns, string name) =>
