@@ -1,9 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using MPKDocumentsMAUI.Services;
-using MPKDocumentsMAUI.Shared;
 using MPKDocumentsMAUI.Shared.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using MPKDocumentsMAUI.Shared.Auth;
@@ -63,56 +61,13 @@ namespace MPKDocumentsMAUI
             builder.Services.AddSingleton<IDocumentFeedWatchService, DocumentFeedWatchService>();
             builder.Services.AddSingleton<StaffRegisterApiClient>();
             builder.Services.AddSingleton<INotificationPermissionService, NotificationPermissionService>();
-            builder.Services.AddSingleton<IAppUpdateService, AppUpdateService>();
 
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();
             builder.Logging.AddDebug();
 #endif
 
-            var app = builder.Build();
-            ConfigureAppVersion();
-            return app;
-        }
-
-        private static void ConfigureAppVersion()
-        {
-            try
-            {
-                var version = AppInfo.Current.VersionString?.Trim();
-                var buildText = AppInfo.Current.BuildString?.Trim();
-                if (!string.IsNullOrWhiteSpace(version)
-                    && int.TryParse(buildText, out var build)
-                    && build > 0)
-                {
-                    AppVersionInfo.Configure(version, build);
-                    return;
-                }
-            }
-            catch
-            {
-                /* AppInfo недоступен до полной инициализации платформы */
-            }
-
-            foreach (var assetName in new[] { "appversion.txt", "appversion.json" })
-            {
-                try
-                {
-                    using var stream = FileSystem.OpenAppPackageFileAsync(assetName).GetAwaiter().GetResult();
-                    using var doc = JsonDocument.Parse(stream);
-                    var version = doc.RootElement.GetProperty("version").GetString();
-                    var build = doc.RootElement.GetProperty("build").GetInt32();
-                    if (!string.IsNullOrWhiteSpace(version) && build > 0)
-                    {
-                        AppVersionInfo.Configure(version, build);
-                        return;
-                    }
-                }
-                catch
-                {
-                    /* пробуем следующий MauiAsset */
-                }
-            }
+            return builder.Build();
         }
 
         private static string? LoadPackagedApiBaseUrl()

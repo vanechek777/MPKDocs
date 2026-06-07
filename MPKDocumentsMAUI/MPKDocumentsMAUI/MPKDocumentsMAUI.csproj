@@ -49,8 +49,8 @@
     <MauiImage Include="Resources\Images\*" />
     <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
     <!-- Шрифты: добавьте MauiFont при появлении файлов в Resources/Fonts/ -->
-    <!-- Raw Assets (also remove the "Resources/Raw" prefix). Версия — appversion.txt, не .json (dotnet/maui#17078). -->
-    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Raw Assets (also remove the "Resources/Raw" prefix). appversion.txt — только для Windows-сборки, не в бандл. -->
+    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" Exclude="Resources/Raw/appversion.txt" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
@@ -70,8 +70,8 @@
   <ItemGroup>
     <AssemblyMetadata Include="MpkBuild" Value="$(ApplicationVersion)" />
   </ItemGroup>
-  <!-- Файл версии: MauiAsset appversion.txt; на Windows — копия как appversion.json рядом с .exe -->
-  <Target Name="GenerateAppVersionJson" BeforeTargets="PrepareForBuild">
+  <!-- Файл версии рядом с .exe — только Windows (установщик / publish-release.ps1) -->
+  <Target Name="GenerateAppVersionJson" BeforeTargets="PrepareForBuild" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
     <WriteLinesToFile File="$(MSBuildThisFileDirectory)Resources/Raw/appversion.txt" Lines="{&quot;version&quot;:&quot;$(ApplicationDisplayVersion)&quot;,&quot;build&quot;:$(ApplicationVersion)}" Overwrite="true" />
   </Target>
   <Target Name="CopyAppVersionJsonToOutput" AfterTargets="Build" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
